@@ -53,7 +53,6 @@ class NFL(callbacks.Plugin):
         import base64
         return base64.b64decode(string)
 
-    # smart_truncate from http://stackoverflow.com/questions/250357/smart-truncate-in-python
     def _smart_truncate(self, text, length, suffix='...'):
         """Truncates `text`, on a word boundary, as close to
         the target length it can come.
@@ -71,18 +70,6 @@ class NFL(callbacks.Plugin):
                 else:
                     return match.group(1) + suffix
         return text
-
-    def _shortenUrl(self, url):
-        posturi = "https://www.googleapis.com/urlshortener/v1/url"
-        headers = {'Content-Type' : 'application/json'}
-        data = {'longUrl' : url}
-
-        data = json.dumps(data)
-        request = urllib2.Request(posturi,data,headers)
-        response = urllib2.urlopen(request)
-        response_data = response.read()
-        shorturi = json.loads(response_data)['id']
-        return shorturi
 
     def _getAge(self, d):
         """ Calculate age from date """
@@ -148,6 +135,10 @@ class NFL(callbacks.Plugin):
 
         return (str(row[0]))
 
+
+    ####################
+    # public functions #
+    ####################
 
     def football(self, irc, msg, args):
         """Display a silly football."""
@@ -744,7 +735,7 @@ class NFL(callbacks.Plugin):
             title = each['title']
             linkurl = each['url']
             output = "{0} - {1} {2}".format(ircutils.underline(origin), self._smart_truncate(title, 40),\
-                ircutils.mircColor(self._shortenUrl(linkurl), 'blue'))
+                ircutils.mircColor(linkurl, 'blue'))
             irc.reply(output)
 
     nflteamnews = wrap(nflteamnews, [('somethingWithoutSpaces')])
@@ -1308,7 +1299,7 @@ class NFL(callbacks.Plugin):
             link = article.get('linkURL', None)
             date = article.get('date_ago', None)
             
-            output = "{0} - {1}".format(ircutils.bold(title), ircutils.mircColor(self._shortenUrl(link), 'blue'))
+            output = "{0} - {1}".format(ircutils.bold(title), ircutils.mircColor(link, 'blue'))
             irc.reply(output)
     
     nfldotcomnews = wrap(nfldotcomnews)
@@ -1450,18 +1441,26 @@ class NFL(callbacks.Plugin):
         team = ul.find('li', attrs={'class':'last'}).find('a')
 
         ul2 = soup.find('ul', attrs={'class':'player-metadata floatleft'})
-        bd = ul2.find('li')
-        bp = bd.findNext('li')
-        exp = bp.findNext('li')
-        col = exp.findNext('li')
-
-        h4 = soup.find('h4', text="QUICK FACTS").findNext('div', attrs={'class':'mod-content'}) 
-        dt = h4.findNext('dt')
-        last = soup.find('li', attrs={'class':'last'}) # <li class="last">
-
-        irc.reply("%s: %s %s %s %s %s %s %s" % (ircutils.bold(playername), numpos, heightw, team, bd, bp, exp, col))
+        
+        bd = ul2.find('li') # and remove span below
+        span = bd.find('span') 
+        if span:
+            span.extract()
             
-        irc.reply(dt)
+        bp = bd.findNext('li')
+        
+        exp = bp.findNext('li') # remove span
+        span = exp.find('span') 
+        if span:
+            span.extract()
+                    
+        col = exp.findNext('li') # remove span.
+        span = col.find('span') 
+        if span:
+            span.extract()
+        
+        output = "{0} :: {1} {2}  Bio: {3} {4}  College: {5}".format(ircutils.bold(playername), numpos.text, team.text, bd.text, exp.text, col.text)
+        irc.reply(output)
         
     nflinfo = wrap(nflinfo, [('text')])
     
