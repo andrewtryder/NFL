@@ -71,22 +71,23 @@ class NFL(callbacks.Plugin):
                     return match.group(1) + suffix
         return text
 
-    def _getAge(self, d):
-        """ Calculate age from date """
-        delta = datetime.datetime.now() - datetime.datetime.strptime(d, "%b %d, %Y") # Feb 22, 1986
-        years, days = divmod(delta.days, 365.25)
-        return '%dy, %dd' % (years, days)
-
-    def _strip_html(self, string):
-        string = re.sub("<.*?>", "", string)
-        string = re.sub(r'\s\s+', ' ', string)
-        return string
-
     def _millify(self, num):
         for x in ['','k','M','B','T']:
             if num < 1000.0:
                 return "%3.1f%s" % (num, x)
             num /= 1000.0
+
+    def _shortenUrl(self, url):
+        posturi = "https://www.googleapis.com/urlshortener/v1/url"
+        headers = {'Content-Type' : 'application/json'}
+        data = {'longUrl' : url}
+
+        data = json.dumps(data)
+        request = urllib2.Request(posturi,data,headers)
+        response = urllib2.urlopen(request)
+        response_data = response.read()
+        shorturi = json.loads(response_data)['id']
+        return shorturi
 
     def _validteams(self, conf=None, div=None):
         """Returns a list of valid teams for input verification."""
@@ -1299,7 +1300,7 @@ class NFL(callbacks.Plugin):
             link = article.get('linkURL', None)
             date = article.get('date_ago', None)
             
-            output = "{0} - {1}".format(ircutils.bold(title), link)
+            output = "{0} - {1}".format(ircutils.bold(title), self._shortenUrl(link))
             irc.reply(output)
     
     nfldotcomnews = wrap(nfldotcomnews)
