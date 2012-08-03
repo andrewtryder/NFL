@@ -1299,7 +1299,7 @@ class NFL(callbacks.Plugin):
             link = article.get('linkURL', None)
             date = article.get('date_ago', None)
             
-            output = "{0} - {1}".format(ircutils.bold(title), ircutils.mircColor(link, 'blue'))
+            output = "{0} - {1}".format(ircutils.bold(title), link)
             irc.reply(output)
     
     nfldotcomnews = wrap(nfldotcomnews)
