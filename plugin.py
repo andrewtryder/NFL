@@ -152,6 +152,54 @@ class NFL(callbacks.Plugin):
 
     football = wrap(football)
     
+    def nflffdraftresults(self, irc, msg, args, opttype):
+        """<QB | TQB | RB | WR | TE | DT | DE | LB | CB | S | D/ST | K | P | HC | ALL>
+        Displays the average position players were selected by team owners in Fantasy Football online drafts.
+        """
+        
+        validtypes = ['QB','TQB','RB','WR','TE','DT','DE','LB','CB','S','D/ST','K','P','HC','ALL']
+        
+        if opttype and opttype not in validtypes:
+            irc.reply("Type must be one of: %s" % validtypes)
+            return
+
+        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9saXZlZHJhZnRyZXN1bHRz')
+        
+        if opttype:
+            url += '?position=%s' % opttype
+        
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'class':'tableBody'})
+        headers = table.findAll('tr')[2]
+        rows = table.findAll('tr')[3:13]
+
+        append_list = []
+
+        for row in rows:
+            rank = row.find('td')
+            player = rank.findNext('td')
+            avgpick = player.findNext('td').findNext('td')
+            append_list.append(rank.getText() + ". " + player.getText() + " (" + avgpick.getText() + ")")
+
+        descstring = string.join([item for item in append_list], " | ") # put the list together.
+
+        if not opttype:
+            opttype = 'ALL'
+
+        title = "Top 10 drafted at: %s" % opttype
+        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
+        irc.reply(output)
+        
+    nflffdraftresults = wrap(nflffdraftresults, [optional('somethingWithoutSpaces')])
+    
     
     def nflweeklyleaders(self, irc, msg, args):
         """
