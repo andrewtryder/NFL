@@ -152,9 +152,108 @@ class NFL(callbacks.Plugin):
 
     football = wrap(football)
     
+    
+    #######################################
+    # Public functions.
+    #######################################
+    
+    
+    def nflffpointleaders(self, irc, msg, args):
+        """
+        Display weekly FF point leaders.
+        Note "Season Leaders" totals are not updated until each week is final (Tuesday AM).
+        """
+        
+        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9sZWFkZXJz')
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        html = html.replace('&nbsp;',' ')
+    
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'id':'playertable_0'})
+        rows = table.findAll('tr')[2:12]
+
+        append_list = []
+        count = 1
+
+        for row in rows:
+            rank = count
+            player = row.find('td').find('a')
+            points = row.find('td', attrs={'class':'playertableStat appliedPoints sortedCell'})
+            append_list.append(str(rank) + ". " + ircutils.bold(player.getText()) + " (" + points.getText() + ")")
+            count += 1 # ++
+    
+        title = "Top 10 FF points:"
+        descstring = string.join([item for item in append_list], " | ") # put the list together.
+        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
+        irc.reply(output)
+    
+    nflffpointleaders = wrap(nflffpointleaders)
+    
+    
+    def nflffprojections(self, irc, msg, args, opttype):
+        """<position>
+        Player projections is based on recommended draft rankings, which take into account projected total points as well as upside and risk.
+        Position is optional. Can be one of: QB | RB | WR | TE | D/ST | K | FLEX
+        """
+  
+        validtypes = { 'QB':'0','RB':'2','WR':'4','TE':'6','D/ST':'16','K':'17','FLEX':'23'}
+        
+        if opttype and opttype not in validtypes:
+            irc.reply("Type must be one of: %s" % validtypes.keys())
+            return
+            
+        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC90b29scy9wcm9qZWN0aW9ucz8=')
+
+        if opttype:
+            url += '?&slotCategoryId=%s' % validtypes[opttype]
+
+        self.log.info(url)
+ 
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % opttype)
+            return
+            
+        html = html.replace('&nbsp;',' ')
+    
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'id':'playertable_0'})
+        rows = table.findAll('tr')[2:12]
+
+        append_list = []
+
+        for row in rows:
+            rank = row.find('td')
+            player = rank.findNext('td')
+            projections = row.find('td', attrs={'class':'playertableStat appliedPoints'})
+            append_list.append(rank.getText() + ". " + ircutils.bold(player.getText()) + " (" + projections.getText() + ")")
+
+        descstring = string.join([item for item in append_list], " | ") # put the list together.
+
+        if opttype:
+            title = "Top 10 FF projections at: %s" % opttype
+        else:
+            title = "Top 10 FF projections"
+            
+        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
+        irc.reply(output)
+    
+    nflffprojections = wrap(nflffprojections, [optional('somethingWithoutSpaces')])
+    
+    
     def nflffdraftresults(self, irc, msg, args, opttype):
-        """<QB | TQB | RB | WR | TE | DT | DE | LB | CB | S | D/ST | K | P | HC | ALL>
+        """<position>
         Displays the average position players were selected by team owners in Fantasy Football online drafts.
+        Position is optional. Can be one of: QB | TQB | RB | WR | TE | DT | DE | LB | CB | S | D/ST | K | P | HC | ALL
         """
         
         validtypes = ['QB','TQB','RB','WR','TE','DT','DE','LB','CB','S','D/ST','K','P','HC','ALL']
@@ -187,7 +286,7 @@ class NFL(callbacks.Plugin):
             rank = row.find('td')
             player = rank.findNext('td')
             avgpick = player.findNext('td').findNext('td')
-            append_list.append(rank.getText() + ". " + player.getText() + " (" + avgpick.getText() + ")")
+            append_list.append(rank.getText() + ". " + ircutils.bold(player.getText()) + " (" + avgpick.getText() + ")")
 
         descstring = string.join([item for item in append_list], " | ") # put the list together.
 
