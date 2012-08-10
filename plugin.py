@@ -157,6 +157,63 @@ class NFL(callbacks.Plugin):
     # Public functions.
     #######################################
     
+    def nflweather(self, irc, msg, args, optteam):
+        """[team]
+        Display weather for the next game with a specific team.
+        """
+        
+        optteam = optteam.upper().strip()
+
+        if optteam not in self._validteams():
+            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+            return
+               
+        url = self._b64decode('aHR0cDovL3d3dy52ZWdhc2luc2lkZXIuY29tL25mbC93ZWF0aGVyLw==')
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        html = html.replace('&nbsp;','').replace('NY JETS', 'NYJ').replace('NY GIANTS', 'NYG').replace('ARZ', 'ARI')
+
+        soup = BeautifulSoup(html)
+        table = soup.find('td', attrs={'class':'viBodyBorderNorm'}).find('table', attrs={'width':'100%'})
+        rows = table.findAll('tr')[1:]
+
+        new_data = collections.defaultdict(list)
+
+        for row in rows:
+            teams = row.find('td')    
+            matches = re.search('<b>(.*?)\s.*?</b>.*?<b>(.*?)\s.*?</b><br />(.*?)ET', teams.renderContents(), re.I|re.S|re.M)
+            t1 = " ".join(matches.group(1).split()) # find matches and remove n+1 spaces.
+            t2 = " ".join(matches.group(2).split()) # ' '.join(content.split(' ')[:-1])
+            time = " ".join(matches.group(3).split())
+            
+            weather = teams.findNext('td').findNext('td')
+            wind = weather.findNext('td')
+            temp = wind.findNext('td')
+            humid = temp.findNext('td')
+    
+            if humid.getText() == "Indoors": # conditional on weather for dome/indoors.
+                weatherString = "INDOORS"
+            else:
+                weatherString = weather.getText() + " " + wind.getText() + ". Temp: " + temp.getText() + "F"
+        
+            new_data[str(t1)].append(str(t1 + "@" + ircutils.underline(t2) + " :: " + time + " " + weatherString))
+            new_data[str(t2)].append(str(t1 + "@" + ircutils.underline(t2) + " :: " + time + " " + weatherString))
+
+        output = new_data.get(optteam, None)
+        
+        if output is None:
+            irc.reply("No weather found for: %s. Game already played?" % optteam)
+        else:
+            irc.reply(" ".join(output))
+
+    nflweather = wrap(nflweather, [('somethingWithoutSpaces')])        
+    
     
     def nflffpointleaders(self, irc, msg, args):
         """
