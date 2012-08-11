@@ -254,6 +254,73 @@ class NFL(callbacks.Plugin):
     nflffpointleaders = wrap(nflffpointleaders)
     
     
+    def nflffaddeddropped(self, irc, msg, args, opttype):
+        """<position>
+        Show the Top 15 most added / dropped. Add in optional position to show at each.
+        Position must be one of:
+        """
+        
+        validtypes = { 'QB':'0','RB':'2','WR':'4','TE':'6','D/ST':'16','K':'17','FLEX':'23'}
+        
+        if opttype and opttype not in validtypes:
+            irc.reply("Type must be one of: %s" % validtypes.keys())
+            return
+        
+        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9hZGRlZGRyb3BwZWQ=')
+            
+        if opttype:
+            url += '?&slotCategoryId=%s' % validtypes[opttype]
+        
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'class':'tableBody'})
+        rows = table.findAll('tr', attrs={'class':'tableBody'})[0:13] #15 is too many for a line.
+
+        added_list = []
+        dropped_list = []
+
+        for row in rows:
+            p1rank = row.find('td')
+            p1 = p1rank.findNext('td')
+            p1pos = p1.findNext('td')
+            p1last = p1pos.findNext('td')
+            p1cur = p1last.findNext('td')
+            p17day = p1cur.findNext('td')
+            space = p17day.findNext('td')
+            p2rank = space.findNext('td')
+            p2 = p2rank.findNext('td')
+            p2pos = p2.findNext('td')
+            p2last = p2pos.findNext('td')
+            p2cur = p2last.findNext('td')
+            p27day = p2cur.findNext('td')
+            added_list.append(p1.getText() + " (" + p17day.getText() + ")")
+            dropped_list.append(p2.getText() + " (" + p27day.getText() + ")")
+
+        addedstring = string.join([item for item in added_list], " | ") 
+        droppedstring = string.join([item for item in dropped_list], " | ") 
+
+        if opttype:
+            addedtitle = "Top 15 added at: %s" % opttype
+            droppedtitle = "Top 15 dropped at: %s" % opttype
+        else:
+            addedtitle = "Top 15 added"
+            droppedtitle = "Top 15 dropped"
+            
+        addedoutput = "{0} :: {1}".format(ircutils.mircColor(addedtitle, 'red'), addedstring)
+        irc.reply(addedoutput)
+        
+        droppedoutput = "{0} :: {1}".format(ircutils.mircColor(droppedtitle, 'red'), droppedstring)
+        irc.reply(droppedoutput)
+        
+    nflffaddeddropped = wrap(nflffaddeddropped, [optional('somethingWithoutSpaces')])        
+    
+    
     def nflffpointsagainst(self, irc, msg, args, optlist, optposition):
         """<--average|--totals> [position]
         Fantasy Football Points Against. Shows by position. Can show average and totals with
