@@ -254,6 +254,57 @@ class NFL(callbacks.Plugin):
     nflffpointleaders = wrap(nflffpointleaders)
     
     
+    def nflffpointsagainst(self, irc, msg, args, optlist, optposition):
+        """<--average|--totals> [position]
+        Fantasy Football Points Against. Shows by position. Can show average and totals with
+        switches.
+        """
+        
+        validpositions = {'QB':'1','RB':'2','WR':'3','TE':'4','K':'5','D/ST':'16'}
+        
+        if optposition not in validpositions:
+            irc.reply("Type must be one of: %s" % validpositions.keys())
+            return
+
+        averages, totals = True, False
+        for (option, arg) in optlist:
+            if option == 'averages':
+                averages, totals = True, False
+            if option == 'totals':
+                averages, totals = False, True
+
+        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9wb2ludHNhZ2FpbnN0') + '?positionId=%s' % validpositions[optposition]
+        
+        if totals and not averages:
+            url += '&statview=totals'
+        elif averages and not totals:
+            url += '&statview=averages'
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'id':'playertable_0'})
+        rows = table.findAll('tr')[2:12]  
+
+        append_list = []
+        
+        for row in rows:
+            player = row.find('td').find('a')
+            points = row.find('td', attrs={'class':'playertableStat appliedPoints'})
+            append_list.append(ircutils.bold(player.getText()) + ": " + points.getText())
+            
+        descstring = string.join([item for item in append_list], " | ")
+        
+        irc.reply(descstring)
+            
+    nflffpointsagainst = wrap(nflffpointsagainst, [getopts({'averages':'','totals':''}), ('somethingWithoutSpaces')])
+    
+    
     def nflffprojections(self, irc, msg, args, opttype):
         """<position>
         Player projections is based on recommended draft rankings, which take into account projected total points as well as upside and risk.
@@ -270,8 +321,6 @@ class NFL(callbacks.Plugin):
 
         if opttype:
             url += '?&slotCategoryId=%s' % validtypes[opttype]
-
-        self.log.info(url)
  
         try:
             req = urllib2.Request(url)
