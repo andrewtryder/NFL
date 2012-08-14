@@ -54,6 +54,7 @@ class NFL(callbacks.Plugin):
         return base64.b64decode(string)
 
     def _int_to_roman(self, i):
+        """Returns a string containing the roman numeral from a string."""
         numeral_map = zip((1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1),
             ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'))
         result = []
@@ -62,18 +63,6 @@ class NFL(callbacks.Plugin):
             result.append(numeral * count)
             i -= integer * count
         return ''.join(result)
-
-    def _roman_to_int(self, n):
-        numeral_map = zip((1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1),
-            ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'))
-
-        n = unicode(n).upper()
-        i = result = 0
-        for integer, numeral in numeral_map:
-            while n[i:i + len(numeral)] == numeral:
-                result += integer
-                i += len(numeral)
-        return result
 
     def _smart_truncate(self, text, length, suffix='...'):
         """Truncates `text`, on a word boundary, as close to
@@ -175,9 +164,60 @@ class NFL(callbacks.Plugin):
     football = wrap(football)
     
     
-    #######################################
-    # Public functions.
-    #######################################
+    def nflsuperbowl(self, irc, msg, args, optbowl):
+        """[number]
+        Display information from a specific Super Bowl. Ex: 39 or XXXIX
+        """
+
+        if optbowl.isdigit():
+            try: 
+                optbowl = self._int_to_roman(int(optbowl))
+            except:
+                irc.reply("Failed to convert %s to a roman numeral" % optbowl)
+                return
+                
+        url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS9zdXBlci1ib3dsLw==')
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'id':'superbowls'}) 
+        rows = table.findAll('tr')[1:]
+
+        sb_data = collections.defaultdict(list)
+
+        for row in rows:
+            year = row.find('td')
+            roman = year.findNext('td')
+            t1 = roman.findNext('td')
+            t1score = t1.findNext('td')
+            t2 = t1score.findNext('td')
+            t2score = t2.findNext('td')
+            mvp = t2score.findNext('td')
+            loc = mvp.findNext('td')
+            city = loc.findNext('td')
+            state = city.findNext('td')
+            
+            addString = year.getText() + " Super Bowl: " + roman.getText() + " :: " +  t1.getText() + " " + t1score.getText() + " " + t2.getText()\
+                + " " + t2score.getText() + "  MVP: " + mvp.getText() + " " + " Location: " + loc.getText() + " (" + city.getText() + ", "\
+                + state.getText() + ")"
+                   
+            sb_data[roman.getText()].append(str(addString))
+                      
+        output = sb_data.get(optbowl, None)
+        
+        if output is None:
+            irc.reply("No Super Bowl found for: %s" % optbowl)
+        else:
+            irc.reply(" ".join(output))
+
+    nflsuperbowl = wrap(nflsuperbowl, [('somethingWithoutSpaces')])
+    
     
     def nflweather(self, irc, msg, args, optteam):
         """[team]
