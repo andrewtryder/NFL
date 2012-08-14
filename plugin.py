@@ -164,6 +164,51 @@ class NFL(callbacks.Plugin):
     football = wrap(football)
     
     
+    def nflawards(self, irc, msg, args, optyear):
+        """[year]
+        Display NFL Awards for a specific year. Use a year from 1966 on. Ex: 2003
+        """
+        
+        testdate = self._validate(optyear, '%Y')
+        if not testdate or int(optyear) < 1966: # superbowl era and on. 
+            irc.reply("Invalid year. Must be YYYY and after 1966.")
+            return
+            
+        url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS95ZWFycy8=') + '%s/' % optyear # 1966 on.
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        
+        if soup.find('h2', text="Award Winners"):
+            table = soup.find('h2', text="Award Winners").findParent('div', attrs={'id':'awards'}).find('table')
+        else:
+            irc.reply("Could not find NFL Awards for the %s season. Perhaps formatting changed or you are asking for the current season in-progress." % optyear)
+            return
+            
+        rows = table.findAll('tr')
+
+        append_list = []
+
+        for row in rows:
+            award = row.find('td')
+            player = award.findNext('td')
+            append_list.append(ircutils.bold(award.getText()) + ": " + player.getText())
+
+        descstring = string.join([item for item in append_list], " | ")
+        title = "%s NFL Awards" % optyear
+        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)       
+        
+        irc.reply(output)
+    
+    nflawards = wrap(nflawards, [('somethingWithoutSpaces')])
+    
+    
     def nflsuperbowl(self, irc, msg, args, optbowl):
         """[number]
         Display information from a specific Super Bowl. Ex: 39 or XXXIX
