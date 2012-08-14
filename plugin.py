@@ -53,6 +53,28 @@ class NFL(callbacks.Plugin):
         import base64
         return base64.b64decode(string)
 
+    def _int_to_roman(self, i):
+        numeral_map = zip((1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1),
+            ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'))
+        result = []
+        for integer, numeral in numeral_map:
+            count = int(i / integer)
+            result.append(numeral * count)
+            i -= integer * count
+        return ''.join(result)
+
+    def _roman_to_int(self, n):
+        numeral_map = zip((1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1),
+            ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'))
+
+        n = unicode(n).upper()
+        i = result = 0
+        for integer, numeral in numeral_map:
+            while n[i:i + len(numeral)] == numeral:
+                result += integer
+                i += len(numeral)
+        return result
+
     def _smart_truncate(self, text, length, suffix='...'):
         """Truncates `text`, on a word boundary, as close to
         the target length it can come.
@@ -1625,7 +1647,7 @@ class NFL(callbacks.Plugin):
     
     nfldotcomnews = wrap(nfldotcomnews)
 
-    
+    # improve matching here?
     def nflplayers(self, irc, msg, args, optplayer):
         """[player]
         Look up NFL players in database.
@@ -1657,7 +1679,8 @@ class NFL(callbacks.Plugin):
             output = "I found {0} results for: {1} :: {2}".format(len(rows), optplayer, results)
             irc.reply(output)
             
-    nflplayers = wrap(nflplayers, [('somethingWithoutSpaces')])
+    #nflplayers = wrap(nflplayers, [('somethingWithoutSpaces')])
+    nflplayers = wrap(nflplayers, [('text')])
     
     def _playerLookup(self, table, optstring):
         db_filename = self.registryValue('nflPlayersDb')
@@ -1965,8 +1988,9 @@ class NFL(callbacks.Plugin):
                 match1 = re.search(r'<b>(.*?)</b><br />(.*?)</div>', str(trans), re.I|re.S) #strip out team and transaction
                 if match1:
                     team = match1.group(1) 
-                    transaction = match1.group(2)
-                    output = ircutils.mircColor(team, 'red') + " - " + ircutils.bold(transaction)
+                    transaction = match1.group(2) 
+                    team = self._translateTeam('team', 'full', str(team)) # use team ABBR.
+                    output = ircutils.mircColor(team, 'red') + " - " + transaction
                     out_array.append(output)
 
         if len(out_array) > 0:
