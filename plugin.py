@@ -2070,6 +2070,11 @@ class NFL(callbacks.Plugin):
             return
     
         soup = BeautifulSoup(html)
+        
+        if not soup.find('a', attrs={'class':'btn-split-btn'}): # check if player is active.
+            irc.reply("Cannot find any career stats for an inactive/unsigned player: %s" % optplayer)
+            return
+        
         playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
         div = soup.find('h4', text="STATS").findNext('table', attrs={'class':'tablehead'})
         header = div.find('tr', attrs={'class':'colhead'}).findAll('th')
@@ -2119,6 +2124,11 @@ class NFL(callbacks.Plugin):
             return
     
         soup = BeautifulSoup(html)
+        
+        if not soup.find('a', attrs={'class':'btn-split-btn'}): # check if player is active.
+            irc.reply("Cannot find any season stats for an inactive/unsigned player: %s" % optplayer)
+            return
+        
         playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
         table = soup.find('table', attrs={'class':'tablehead'}) # first table.
         headings = table.findAll('tr', attrs={'class':'colhead'})
@@ -2136,7 +2146,7 @@ class NFL(callbacks.Plugin):
         row = rows[yearindex].findAll('td') # the year comes with the index number, which we find above.
 
         output = string.join([ircutils.bold(each.text) + ": " + row[i].text for i,each in enumerate(heading)], " | ")
-        irc.reply(ircutils.mircColor(playername, 'red') + "(" + optyear + ") :: " + output)
+        irc.reply(ircutils.mircColor(playername, 'red') + " :: " + output)
             
     nflseasonstats = wrap(nflseasonstats, [('somethingWithoutSpaces'), ('text')])
     
