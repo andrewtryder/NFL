@@ -2054,7 +2054,9 @@ class NFL(callbacks.Plugin):
             irc.reply("No player found for: %s" % optplayer)
             return
         
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
+        
+        #self.log.info(url)
         
         try:
             req = urllib2.Request(url)
@@ -2063,22 +2065,21 @@ class NFL(callbacks.Plugin):
             irc.reply("Failed to open: %s" % url)
             return
 
-        html = html.replace('tr class="evenrow','tr class="oddrow')
-
         if "No stats available." in html:
             irc.reply("No stats available for: %s" % optplayer)
             return
     
         soup = BeautifulSoup(html)
         playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
-        table = soup.find('table', attrs={'class':'tablehead'})    
-        heading = table.find('tr', attrs={'class':'colhead'}).findAll('td')
-        row = table.find('tr', attrs={'class': 'total'}).findAll('td')
+        div = soup.find('h4', text="STATS").findNext('table', attrs={'class':'tablehead'})
+        header = div.find('tr', attrs={'class':'colhead'}).findAll('th')
+        row = div.find('td', text="Career").findParent('tr')
+        tds = row.findAll('td')
 
-        del heading[0:2],row[0] # must delete one because career has colspan=2. We also remove the first element. Total 2. 
+        del header[0],tds[0] # junk parts of career we can delete.
 
-        output = string.join([ircutils.bold(each.text) + ": " + row[i].text for i,each in enumerate(heading)], " | ")
-        irc.reply(ircutils.mircColor(playername, 'red') + " :: " + output)
+        output = string.join([ircutils.bold(header[i].text) + ": " + td.text for i,td in enumerate(tds)], " | ")        
+        irc.reply(ircutils.mircColor(playername, 'red') + " (career) :: " + output)
             
     nflcareerstats = wrap(nflcareerstats, [('text')])
     
