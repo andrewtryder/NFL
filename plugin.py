@@ -709,37 +709,142 @@ class NFL(callbacks.Plugin):
     nfltopsalary = wrap(nfltopsalary, [(getopts({'average':'', 'caphit':''})), optional('somethingWithoutSpaces')])
     
         
-    def nflleagueleaders(self, irc, msg, args, optcategory, optyear):
-        """[category] <YYYY>
-        Display the NFL league leaders for a specific category. Use year, 2003-present, to
-        display a season other than current.
-        """
+    def nflleagueleaders(self, irc, msg, args, optlist, optcategory, optstat, optyear):
+        """<--postseason|--num20> [category] [stat] <year>
+        Display NFL statistical leaders in a specific category for a stat. Year, which can go back until 2001, is optional. 
+        Defaults to the current season. Ex: Passing td or Punting punts 2003. Stats show regular season. Can show postseason with --postseason
+        prefix. Default output is top10 and top20 can be shown with --num20 prefix.
+        """ 
         
-        category = {    'passingyards':'passingYards', 'passingtds':'passingTouchdowns', 'qbr':'quarterbackRating',
-                        'rushingyards':'rushingYards', 'rushtd':'rushingTouchdowns', 'rec':'receptions',
-                        'recyards':'receivingYards', 'rectds':'receivingTouchdowns', 'tackles':'totalTackles',
-                        'sacks':'sacks', 'int':'interceptions', 'kickpoints':'totalPoints' }
+        statsCategories = { 
+                'Passing': { 
+                    'qbr':'49', 
+                    'comp':'1',
+                    'att':'2',
+                    'comp%':'41',
+                    'yards':'4',
+                    'yards/gm':'42',
+                    'td':'5',
+                    'int':'3',
+                    'sacked':'8',
+                    'sackedyardslost':'9',
+                    'fumbles':'47',
+                    'fumbleslost':'48'
+                },
+                'Rushing': {
+                    'rushes':'16',
+                    'yards':'17',
+                    'yards/g':'39',
+                    'avg':'40',
+                    'td':'18',
+                    'fumbles':'47',
+                    'fumbleslost':'48'
+                },
+                'Receiving': {
+                    'receptions':'27',
+                    'recyards':'28',
+                    'yards/gm':'44',
+                    'yards/avg':'45',
+                    'longest':'30',
+                    'yac':'46',
+                    '1stdowns':'33',
+                    'tds':'29',
+                    'fumbles':'47',
+                    'fumbleslost':'48'
+                },
+                'Kicking': {
+                    '0-19':'208',
+                    '20-29':'210',
+                    '30-39':'212',
+                    '40-49':'214',
+                    '50+':'216',
+                    'fgm':'222',
+                    'fga':'221',
+                    'pct':'230',
+                    'longest':'224',
+                    'xpm':'225',
+                    'xpa':'226',
+                    'xp%':'231'            
+                },
+                'Returns':{
+                    'kickoffreturns':'311',
+                    'kickoffyards':'312',
+                    'kickoffavg':'319',
+                    'kickofflongest':'314',
+                    'kickofftd':'315',
+                    'puntreturns':'301',
+                    'puntreturnyards':'302',
+                    'puntreturnavg':'320',
+                    'puntreturnlongest':'304',
+                    'puntreturntds':'305'
+                },
+                'Punting': {
+                    'punts':'402',
+                    'puntyards':'403',
+                    'puntavg':'411',
+                    'puntlong':'408',
+                    'puntwithin20':'404',
+                    'puntwithin10':'405',
+                    'faircatch':'401',
+                    'touchback':'406',
+                    'blocked':'407'            
+                },
+                'Defense':{
+                    'solotackles':'128',
+                    'assistedtackles':'129',
+                    'totaltackles':'130',
+                    'sacks':'106',
+                    'sacksyardslost':'107',
+                    'stuffs':'101',
+                    'stuffsyardslost':'102',
+                    'int':'108',
+                    'intyards':'109',
+                    'inttds':'110',
+                    'deftd':'103',
+                    'forcedfumbles':'114',
+                    'pd':'113',
+                    'safety':'115'            
+                }                         
+            }
         
-        optcategory = optcategory.lower()
+        optcategory = optcategory.title() # must title this category
         
-        if optcategory not in category:
-            irc.reply("Category must be one of: %s" % category.keys())
+        if optcategory not in statsCategories:
+            irc.reply("Category must be one of: %s" % statsCategories.keys())
             return
         
-        url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL2xlYWd1ZWxlYWRlcnM=') + '?category=%s&groupId=9' % (category[optcategory])
+        optstat = optstat.lower() # stat key is lower. value is #. 
         
+        if optstat not in statsCategories[optcategory]:
+            irc.reply("Stat for %s must be one of: %s" % (optcategory, statsCategories[optcategory].keys()))
+            return
+            
         if optyear: 
             testdate = self._validate(optyear, '%Y')
             if not testdate:
                 irc.reply("Invalid year. Must be YYYY.")
                 return
-            if int(optyear) < 2003:
-                irc.reply("Year must be 2003 or after.")
+            if int(optyear) < 2000:
+                irc.reply("Year must be 2001 or after.")
                 return
-            
-            url += '&season=%s&wjb=' % optyear
-        else:
-            url += '&wjb='    
+
+        postseason, outlimit = False, '10'
+        for (option, arg) in optlist:
+            if option == 'postseason':
+                postseason = True
+            if option == 'num20':
+                outlimit = '20'
+                        
+        url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3N0YXRzL2J5Y2F0ZWdvcnk=')
+        url += '?cat=%s&conference=NFL&sort=%s&timeframe=All' % (optcategory, statsCategories[optcategory][optstat])
+        
+        if optyear: # don't need year for most current.
+            if not postseason:
+                url += '&year=season_%s' % optyear
+            else:
+                url += '&year=postseason_%s' % optyear 
+        
+        #self.log.info(url)
         
         try:        
             req = urllib2.Request(url)
@@ -747,26 +852,30 @@ class NFL(callbacks.Plugin):
         except:
             irc.reply("Failed to open: %s" % url)
             return
-            
-        html = html.replace('class="ind alt nw"', 'class="ind nw"')
+
+        html = html.replace('&nbsp;','')
         
         soup = BeautifulSoup(html)
-        table = soup.find('table', attrs={'class':'table'})
-        rows = table.findAll('tr')
+        selectedyear = soup.find('select', attrs={'name':'year'}).find('option', attrs={'selected':'selected'}) # creative way to find the year.
+        table = soup.find('tr', attrs={'class':'ysptblthmsts', 'align':'center'}).findParent('table')
+        header = table.findAll('tr')[1].findAll('td')
+        rows = table.findAll('tr')[2:]
 
         append_list = []
-        
-        for row in rows[1:6]:
-            rank = row.find('td', attrs={'class':'ind nw', 'nowrap':'nowrap', 'width':'10%'}).renderContents()
-            team = row.find('td', attrs={'class':'ind nw', 'nowrap':'nowrap', 'width':'70%'}).find('a').text
-            num = row.find('td', attrs={'class':'ind nw', 'nowrap':'nowrap', 'width':'20%'}).renderContents()
-            append_list.append(rank + ". " + team + " " + num)
 
-        thelist = string.join([item for item in append_list], " | ")
-        
-        irc.reply("Leaders in %s: %s" % (ircutils.bold(category[optcategory]), thelist))
+        for row in rows[0:int(outlimit)]:
+            name = str(row.findAll('td')[0].getText()) # always first
+            team = str(row.findAll('td')[1].getText()) # always next
+            sortfield = row.find('span', attrs={'class':'yspscores'}) # whatever field you are sorting by will have this span inside the td. 
+            append_list.append(ircutils.bold(name) + "(" + team + ") - " + str(sortfield.getText()))
 
-    nflleagueleaders = wrap(nflleagueleaders, [('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
+        title = "Top %s in %s(%s) for %s" % (outlimit, optcategory, optstat, selectedyear.getText())
+        descstring = string.join([item for item in append_list], " | ")
+        
+        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
+        irc.reply(output)            
+
+    nflleagueleaders = wrap(nflleagueleaders, [(getopts({'postseason':'','num20':''})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
     
 
     def nflteams(self, irc, msg, args, optconf, optdiv):
