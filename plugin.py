@@ -54,7 +54,7 @@ class NFL(callbacks.Plugin):
         return base64.b64decode(string)
 
     def _int_to_roman(self, i):
-        """Returns a string containing the roman numeral from a string."""
+        """Returns a string containing the roman numeral from a number."""
         numeral_map = zip((1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1),
             ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'))
         result = []
@@ -953,12 +953,34 @@ class NFL(callbacks.Plugin):
     nflteamrankings = wrap(nflteamrankings, [('somethingWithoutSpaces')])
     
     
-    def nflweek(self, irc, msg, args, optweek):
-        """<--pre|--post> <week>
+    def nflweek(self, irc, msg, args, optlist, optweek):
+        """<week #|next>
         Display this week's schedule in the NFL. Use --pre or --post to display pre/post season games.
         """
         
         url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsU2NoZWR1bGUuanM=')
+        
+        usePre, useNext, outputWeek = False, False, False
+        for (option, arg) in optlist:
+            if option == 'pre':
+                usePre = True
+        
+        if optweek:
+            if optweek == "next":
+                useNext = True
+            elif optweek.isdigit():
+                if usePre: 
+                    if 1 <= int(optweek) <= 4:
+                       outputWeek = "Preseason Week %s" % optweek
+                    else:
+                        irc.reply("ERROR: Preseason week number must be between 1 and 4.")
+                        return
+                else:
+                    if 1 <= int(optweek) <= 17:
+                        outputWeek = "Week %s" % optweek
+                    else:
+                        irc.reply("ERROR: Week must be between 1-17")
+                        return 
 
         try:
             req = urllib2.Request(url)
@@ -987,9 +1009,17 @@ class NFL(callbacks.Plugin):
         if games is None:
             irc.reply("Failed to load the games data.")
             return
+        
+        if outputWeek:
+            games = [item['games'] for item in games if item['weekName'] == outputWeek]
+            weekOutput = outputWeek
+        elif useNext:
+            games = [item['games'] for item in games if item['weekName'] == nextWeekName]
+            weekOutput = nextWeekName
+        else:
+            games = [item['games'] for item in games if item['weekName'] == currentWeekName]
+            weekOutput = currentWeekName
             
-        games = [item['games'] for item in games if item['weekName'] == currentWeekName]
-
         append_list = []
 
         for games in games:
@@ -999,11 +1029,11 @@ class NFL(callbacks.Plugin):
                 append_list.append("[" + t['date']['num'] + "] " + awayTeam + "@" + homeTeam + " " + t['date']['time'])
         
         descstring = string.join([item for item in append_list], " | ")
-        output = "{0} :: {1}".format(ircutils.bold(currentWeekName), descstring)
+        output = "{0} :: {1}".format(ircutils.bold(weekOutput), descstring)
         
         irc.reply(output)
     
-    nflweek = wrap(nflweek, [optional('somethingWithoutSpaces')])
+    nflweek = wrap(nflweek, [(getopts({'pre':''})), optional('somethingWithoutSpaces')])
     
     
     def nflstandings(self, irc, msg, args, optlist, optconf, optdiv):
@@ -2086,7 +2116,7 @@ class NFL(callbacks.Plugin):
         output = string.join([ircutils.bold(header[i].text) + ": " + td.text for i,td in enumerate(tds)], " | ")        
         irc.reply(ircutils.mircColor(playername, 'red') + " (career) :: " + output)
             
-    nflcareerstats = wrap(nflcareerstats, [('text')])
+    nflcareerstats = wrap(nflcareerstats, [(getopts({'stats':''})), ('text')])
     
 
     def nflseasonstats(self, irc, msg, args, optyear, optplayer):
