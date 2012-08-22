@@ -2033,8 +2033,48 @@ class NFL(callbacks.Plugin):
         irc.reply(ircutils.mircColor(playername, 'red') + " :: " + output)
     
     nflgame = wrap(nflgame, [('text')])
-    
-    
+
+
+    def nflrotonews(self, irc, msg, args, optplayer):
+        """[player]
+        Display latest Rotowire news for NFL player.
+        """
+        
+        optplayer = optplayer.lower().strip()
+        
+        lookupid = self._playerLookup('rid', optplayer)
+        
+        if lookupid == "0":
+            irc.reply("No player found for: %s" % optplayer)
+            return
+        
+        url = self._b64decode('aHR0cDovL3d3dy5yb3Rvd29ybGQuY29tL3BsYXllci9uZmw=') + '/%s/' % lookupid
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+
+        if soup.find('div', attrs={'class':'playerdetails'}):
+            playerName = soup.find('div', attrs={'class':'playerdetails'}).find('h1')
+
+        if soup.find('div', attrs={'class':'playerdetails'}):
+            playerNews = soup.find('div', attrs={'class':'playernews'})
+            playerNews = ' '.join(str(playerNews.getText().replace('&quot;','"')).split()) 
+        else:
+            playerNews = "No news for player found."
+        
+        output = "{0} :: {1}".format(ircutils.mircColor(playerName.getText(), 'red'), playerNews)
+        
+        irc.reply(output)
+        
+    nflrotonews = wrap(nflrotonews, [('text')])    
+
+
     def nflplayernews(self, irc, msg, args, optplayer):
         """[player]
         Display latest news for NFL player.
