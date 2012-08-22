@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
 ###
 # Copyright (c) 2012, spline
 # All rights reserved.
 #
 #
 ###
+
 
 from BeautifulSoup import BeautifulSoup
 import urllib2
@@ -1142,7 +1144,53 @@ class NFL(callbacks.Plugin):
         output = "{0} :: {1}  TOTAL: {2}".format(ircutils.bold(optteam), descstring, ircutils.mircColor(self._millify(float(caphit)), 'blue'))
         irc.reply(output)
 
-    nflcap = wrap(nflcap, [('somethingWithoutSpaces')])        
+    nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
+    
+    
+    def nflcoachingstaff(self, irc, msg, args, optteam):
+        """[team]
+        Display a NFL team's coaching staff.
+        """
+        
+        optteam = optteam.upper().strip()
+
+        if optteam not in self._validteams():
+            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+            return
+        
+        url = self._b64decode('aHR0cDovL2VuLndpa2lwZWRpYS5vcmcvd2lraS9MaXN0X29mX2N1cnJlbnRfTmF0aW9uYWxfRm9vdGJhbGxfTGVhZ3VlX3N0YWZmcw==')
+
+        try:
+            req = urllib2.Request(url)
+            req.add_header('User-Agent', 'Mozilla/5.0')
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        tables = soup.findAll('table', attrs={'style':'text-align: left;'})
+
+        coachingstaff = collections.defaultdict(list)
+
+        for table in tables:
+            listitems = table.findAll('li')[3:]
+            for li in listitems:
+                team = li.findPrevious('h3')
+                team = self._translateTeam('team', 'full', team.getText())
+                coachingString = li.getText().replace(u' –',': ') #.replace(' –',': ') #.replace(u' –',': ')
+                self.log.info(team)
+                coachingstaff[team].append(coachingString)
+
+        output = coachingstaff.get(team, None)
+        
+        if not output:
+            irc.reply("Failed to find coaching staff for: %s. Maybe something broke?" % optteam)
+        else:
+            descstring = string.join([item for item in output], " | ")
+            irc.reply("{0} Coaching Staff :: {1}".format(optteam, descstring))
+    
+    nflcoachingstaff = wrap(nflcoachingstaff, [('somethingWithoutSpaces')])
 
     
     def nfldepthchart(self, irc, msg, args, optteam, opttype):
@@ -1254,9 +1302,14 @@ class NFL(callbacks.Plugin):
                 d['position'] = position.renderContents().strip()
                 object_list.append(d)
 
+        append_list = []
+
         for each in object_list:
             if postable[optposition] == each['playertype']:
-                irc.reply(each)
+                append_list.append(each)
+        
+        if len(append_list) < 1:
+            irc.reply("I did not find any ")
         
     nflroster = wrap(nflroster, [('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
 
@@ -1871,6 +1924,7 @@ class NFL(callbacks.Plugin):
     
     nfldotcomnews = wrap(nfldotcomnews)
 
+
     # improve matching here?
     def nflplayers(self, irc, msg, args, optplayer):
         """[player]
@@ -1903,10 +1957,12 @@ class NFL(callbacks.Plugin):
             output = "I found {0} results for: {1} :: {2}".format(len(rows), optplayer, results)
             irc.reply(output)
             
-    #nflplayers = wrap(nflplayers, [('somethingWithoutSpaces')])
     nflplayers = wrap(nflplayers, [('text')])
     
+    
     def _playerLookup(self, table, optstring):
+        """Return the specific id number[table] for playerstring"""
+        
         db_filename = self.registryValue('nflPlayersDb')
         
         if not os.path.exists(db_filename):
@@ -1979,8 +2035,57 @@ class NFL(callbacks.Plugin):
     nflgame = wrap(nflgame, [('text')])
     
     
-    def nflinfo(self, irc, msg, args, optplayer):
+    def nflplayernews(self, irc, msg, args, optplayer):
+        """[player]
+        Display latest news for NFL player.
+        """
+        
+        optplayer = optplayer.lower().strip()
+        
+        lookupid = self._playerLookup('eid', optplayer)
+        
+        if lookupid == "0":
+            irc.reply("No player found for: %s" % optplayer)
+            return    
+    
+        url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcnVwZGF0ZQ==') + '?playerId=%s&wjb=' % lookupid
+
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        playerName = soup.find('div', attrs={'class':'sub bold'})
+        if not playerName:
+            irc.reply("I could not find any news. Did formatting change?")
+            return
+
+        if soup.find('div', attrs={'class':'ind line'}):
+            playerNews = soup.find('div', attrs={'class':'ind line'})
+            extraPlayerNews = playerNews.find('div', attrs={'style':'font-style:italic;'})
+            if extraPlayerNews: # clean it up.
+                extraPlayerNews.extract()
+                playerNews = ' '.join(str(playerNews.getText()).split()) # for some reason, rotowire has many spaces in its reports.
+            else:
+                playerNews = "No news found for player"
+    
+        output = "{0} :: {1}".format(ircutils.mircColor(playerName.getText(), 'red'), playerNews)
+        
+        irc.reply(output)
+    
+    nflplayernews = wrap(nflplayernews, [('text')])
+   
+    
+    def nflinfo(self, irc, msg, args, optlist, optplayer):
         """Display basic information on NFL player."""
+        
+        mobile = False
+        for (option, arg) in optlist:
+            if option == 'mobile':
+                mobile = True
         
         optplayer = optplayer.lower().strip()
         
@@ -1990,47 +2095,81 @@ class NFL(callbacks.Plugin):
             irc.reply("No player found for: %s" % optplayer)
             return
         
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
-
-        try:        
-            req = urllib2.Request(url)
-            html = (urllib2.urlopen(req)).read()
-        except:
-            irc.reply("Failed to open: %s" % url)
-            return
-            
-        html = html.replace('&nbsp;','')
-
-        soup = BeautifulSoup(html)
-        playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
-        ul = soup.find('ul', attrs={'class':'general-info'})
-        numpos = ul.find('li', attrs={'class':'first'})
-        heightw = numpos.findNext('li')
-        team = ul.find('li', attrs={'class':'last'}).find('a')
-
-        ul2 = soup.find('ul', attrs={'class':'player-metadata floatleft'})
+        if not mobile: # mobile method, which is an alternative.
         
-        bd = ul2.find('li') # and remove span below
-        span = bd.find('span') 
-        if span:
-            span.extract()
+            url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcmluZm8=') + '?playerId=%s&wjb=' % lookupid
+
+            try:
+                req = urllib2.Request(url)
+                html = (urllib2.urlopen(req)).read()
+            except:
+                irc.reply("Failed to open: %s" % url)
+                return
+                                
+            #html = html.replace('class="ind alt"','class="ind"')
+
+            soup = BeautifulSoup(html)
+            team = soup.find('td', attrs={'class':'teamHeader'}).find('b')
+            playerName = soup.find('div', attrs={'class':'sub bold'})
+            divs = soup.findAll('div', attrs={'class':re.compile('^ind tL$|^ind alt$|^ind$')})
+
+            append_list = []
+
+            for div in divs:
+                bold = div.find('b')
+                if bold:
+                    key = bold        
+                    bold.extract()
+                    value = div
+                    append_list.append(str(key.getText() + ": " + value.getText()))
+
+            descstring = string.join([item for item in append_list], " | ")
+            output = "{0} :: {1} :: {2}".format(ircutils.mircColor(playerName.getText(), 'red'),ircutils.bold(team.getText()), descstring)
             
-        bp = bd.findNext('li')
-        
-        exp = bp.findNext('li') # remove span
-        span = exp.find('span') 
-        if span:
-            span.extract()
+            irc.reply(output)           
                     
-        col = exp.findNext('li') # remove span.
-        span = col.find('span') 
-        if span:
-            span.extract()
+        else:
         
-        output = "{0} :: {1} {2}  Bio: {3} {4}  College: {5}".format(ircutils.bold(playername), numpos.text, team.text, bd.text, exp.text, col.text)
-        irc.reply(output)
+            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
+            
+            try:        
+                req = urllib2.Request(url)
+                html = (urllib2.urlopen(req)).read()
+            except:
+                irc.reply("Failed to open: %s" % url)
+                return
+            
+            html = html.replace('&nbsp;','')
+
+            soup = BeautifulSoup(html)
+            playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
+            ul = soup.find('ul', attrs={'class':'general-info'})
+            numpos = ul.find('li', attrs={'class':'first'})
+            heightw = numpos.findNext('li')
+            team = ul.find('li', attrs={'class':'last'}).find('a')
+            ul2 = soup.find('ul', attrs={'class':'player-metadata floatleft'})       
+            
+            bd = ul2.find('li') # and remove span below
+            span = bd.find('span') 
+            if span:
+                span.extract()
+            
+            bp = bd.findNext('li')
         
-    nflinfo = wrap(nflinfo, [('text')])
+            exp = bp.findNext('li') # remove span
+            span = exp.find('span') 
+            if span:
+                span.extract()
+                    
+            col = exp.findNext('li') # remove span.
+            span = col.find('span') 
+            if span:
+                span.extract()
+        
+            output = "{0} :: {1} {2}  Bio: {3} {4}  College: {5}".format(ircutils.bold(playername), numpos.text, team.text, bd.text, exp.text, col.text)
+            irc.reply(output)
+        
+    nflinfo = wrap(nflinfo, [(getopts({'mobile':''})), ('text')])
     
     
     def nflcontract(self, irc, msg, args, optplayer):
@@ -2085,8 +2224,6 @@ class NFL(callbacks.Plugin):
             return
         
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
-        
-        #self.log.info(url)
         
         try:
             req = urllib2.Request(url)
