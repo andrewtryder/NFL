@@ -1132,14 +1132,18 @@ class NFL(callbacks.Plugin):
         rows = tbody.findAll('tr')
         caphit = str(rows[-1].find('td', attrs={'class':'total figure'}).text).replace(',','')
         rows = rows[-4:-1]
-
+        
         append_list = []
         
         for row in rows:
             title = row.find('td', attrs={'colspan':'2'}).text
             figure = str(row.find('td', attrs={'class':'total figure'}).text).replace(',','')
-            append_list.append(ircutils.underline(title) + ": " + self._millify(float(figure)))
 
+            if figure.isdigit():
+                append_list.append(ircutils.underline(title) + ": " + self._millify(float(figure)))
+            else:
+                append_list.append(ircutils.underline(title) + ": " + figure)
+            
         descstring = string.join([item for item in append_list], " | ")
         output = "{0} :: {1}  TOTAL: {2}".format(ircutils.bold(optteam), descstring, ircutils.mircColor(self._millify(float(caphit)), 'blue'))
         irc.reply(output)
