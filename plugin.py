@@ -2297,7 +2297,7 @@ class NFL(callbacks.Plugin):
         output = string.join([ircutils.bold(header[i].text) + ": " + td.text for i,td in enumerate(tds)], " | ")        
         irc.reply(ircutils.mircColor(playername, 'red') + " (career) :: " + output)
             
-    nflcareerstats = wrap(nflcareerstats, [(getopts({'stats':''})), ('text')])
+    nflcareerstats = wrap(nflcareerstats, [('text')])
     
 
     def nflseasonstats(self, irc, msg, args, optyear, optplayer):
