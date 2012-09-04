@@ -266,6 +266,53 @@ class NFL(callbacks.Plugin):
     nflsuperbowl = wrap(nflsuperbowl, [('somethingWithoutSpaces')])
     
     
+    def nflpracticereport (self, irc, msg, args, optteam):
+        """[team]
+        Display most recent practice report for team.
+        """
+        
+        optteam = optteam.upper().strip()
+
+        if optteam not in self._validteams():
+            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+            return
+        
+        url = self._b64decode('aHR0cDovL2hvc3RlZC5zdGF0cy5jb20vZmIvcHJhY3RpY2UuYXNw')
+
+        try:
+            request = urllib2.Request(url)
+            html = (urllib2.urlopen(request)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        timeStamp = soup.find('div', attrs={'id':'shsTimestamp'}).getText()
+        tds = soup.findAll('td', attrs={'class':'shsRow0Col shsNamD', 'nowrap':'nowrap'})
+
+        practicereport = collections.defaultdict(list)
+
+        for td in tds:
+            team = td.findPrevious('h2', attrs={'class':'shsTableTitle'})
+            team = self._translateTeam('team', 'full', str(team.getText())) # translate full team into abbr.
+            player = td.find('a')
+            appendString = str(ircutils.bold(player.getText()))
+            report = td.findNext('td', attrs={'class':'shsRow0Col shsNamD'})
+            if report:
+                appendString += str("(" + report.getText() + ")")
+        
+            practicereport[team].append(appendString)
+
+        output = practicereport.get(optteam, None)
+                
+        if output is None:
+            irc.reply("No recent practice reports for: {0} as of {1}".format(ircutils.mircColor(optteam, 'red'), timeStamp.replace('Last updated ','')))
+        else:
+            irc.reply("{0} Practice Report ({1}) :: {2}".format(ircutils.mircColor(optteam, 'red'), timeStamp, " | ".join(output)))
+    
+    nflpracticereport = wrap(nflpracticereport, [('somethingWithoutSpaces')])
+    
+    
     def nflweather(self, irc, msg, args, optteam):
         """[team]
         Display weather for the next game with a specific team.
