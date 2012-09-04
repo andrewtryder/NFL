@@ -1617,7 +1617,9 @@ class NFL(callbacks.Plugin):
 
 
     def nfldraft(self, irc, msg, args, optyear, optround):
-        """
+        """<year> <round>
+        Show the NFL draft round from year. Year must be 1996 or after and optional round must be between 1 and 7.
+        Defaults to round 1 if round is not given. Ex: nfldraft 2000 6 (Would show the 6th round of the 2000 draft)
         """
         
         if optyear: # if optyear is there, test for valid and if after 2003.
@@ -1625,13 +1627,13 @@ class NFL(callbacks.Plugin):
             if not testdate:
                 irc.reply("Invalid year. Must be YYYY.")
                 return
-            if optyear < 2003:
-                irc.reply("Year must be after 2003.")
+            if optyear < 1996:
+                irc.reply("Year must be after 1996.")
                 return
                 
         if optround:
-            if 1 <= optround <= 2:
-                irc.reply("Draft round must be 1 or 2.")
+            if 1 <= optround <= 7:
+                irc.reply("Draft round must be 1 or 7.")
                 return
         
         url = self._b64decode('aHR0cDovL2luc2lkZXIuZXNwbi5nby5jb20vbmZsL2RyYWZ0L3JvdW5kcw==')
@@ -1644,15 +1646,11 @@ class NFL(callbacks.Plugin):
 
         try:
             req = urllib2.Request(url)
-            response = urllib2.urlopen(req)
-            html = response.read()
+            html = (urllib2.urlopen(req)).read()
         except:
             irc.reply("Failed to fetch: %s" % url)
             return
 
-        html = html.replace('ind alt nw','ind nw tL') # fix up some html before parse.
-        html = html.replace('evenrow', 'oddrow')
-        
         soup = BeautifulSoup(html)
 
         # check and make sure we have a table, otherwise error.
@@ -1662,40 +1660,36 @@ class NFL(callbacks.Plugin):
         else:
             table = soup.find('table', attrs={'class':'tablehead draft-tracker'})
             
-        h1 = soup.find('h2') 
-        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow team.*')})
+        h2 = soup.find('h2')
+        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
 
         object_list = []
                
         for row in rows:
-            picknumber = row.find('p', attrs={'class':'round-number'}).text.strip()
-            team = row.find('p', attrs={'class':'team-name'}).find('a')
-            pos = row.find('div', attrs={'class':'position-bubble'}).text.strip()
-            player = row.find('p', attrs={'class':'player-name'}).text.strip()
-            if row.find('p', attrs={'class':'notes'}): # some picks have notes.
-                notes = row.find('p', attrs={'class':'notes'})
-                team = self._translateTeam('team', 'draft', team.text.strip())
-                team += " " + notes.text.strip()
-            else:
-                team = self._translateTeam('team', 'draft', team.text.strip())
-                
-            d = collections.OrderedDict()
-            d['pick'] = picknumber
-            d['team'] = team
-            d['pos'] = pos
-            d['player'] = player
-            
+            pickNumber = row.find('p', attrs={'class':'round-number'})
+            pickName = row.find('p', attrs={'class':'player-name'})
+            pickPos = row.find('li', attrs={'class':'li-position'})
+            pickTeam = row.find('p', attrs={'class':'team-name'})
+    
+            appendString = ircutils.bold(pickNumber.getText()) + ". " + pickName.getText() + " - " + pickTeam.getText()
+    
+            if row.find('p', attrs={'class':'notes'}):
+                appendString += " (" + row.find('p', attrs={'class':'notes'}).getText() + ")"
+    
+            object_list.append(appendString)            
         
-        irc.reply(ircutils.mircColor(h1.text.strip(), 'red') + ": ") # print header.
+        irc.reply(ircutils.mircColor(h2.getText().strip(), 'red') + ": ") # print header.
         
         for N in self._batch(object_list, 6):
-            irc.reply(' '.join(str(n['pick']) + "." + " " + ircutils.bold(n['player']) + "[" + n['pos'] + "]" + " (" + n['team'] + ")" for n in N)) 
+            irc.reply(' | '.join(str(n) for n in N)) 
 
     nfldraft = wrap(nfldraft, [optional('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
     
     
     def nfltrades(self, irc, msg, args):
-        """Display the last NFL 10 trades."""
+        """
+        Display the last NFL 10 trades.
+        """
     
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwtdHJhZGUtdHJhY2tlci8=')
 
@@ -1708,7 +1702,6 @@ class NFL(callbacks.Plugin):
         
         soup = BeautifulSoup(html)
         title = soup.find('title')
-
         table = soup.find('table', attrs={'border':'0'})
         tbodys = table.findAll('tbody')
 
