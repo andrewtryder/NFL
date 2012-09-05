@@ -1519,9 +1519,11 @@ class NFL(callbacks.Plugin):
     nflinjury = wrap(nflinjury, [getopts({'details':''}), ('somethingWithoutSpaces')])
 
     def nflvaluations(self, irc, msg, args):
-        """Display current NFL team valuations from Forbes."""
+        """
+        Display current NFL team valuations from Forbes.
+        """
         
-        url = self._b64decode('aHR0cDovL3d3dy5mb3JiZXMuY29tL2xpc3RzLzIwMTEvMzAvbmZsLXZhbHVhdGlvbnMtMTFfcmFuay5odG1s')
+        url = self._b64decode('aHR0cDovL3d3dy5mb3JiZXMuY29tL25mbC12YWx1YXRpb25zL2xpc3Qv')
 
         try:
             req = urllib2.Request(url)
@@ -1531,34 +1533,21 @@ class NFL(callbacks.Plugin):
             return
  
         soup = BeautifulSoup(html)
-        #tbody = soup.find('tbody', attrs={'id':'listbody'})
-        tbody = soup.find('tbody')
+        tbody = soup.find('tbody', attrs={'id':'listbody'})
         rows = tbody.findAll('tr')
 
-        object_list = []
+        append_list = []
 
         for row in rows:
-            rank = row.find('td', attrs={'class':'rank'})
-            team = rank.findNext('td')
-            value = team.findNext('td')
-            yrchange = value.findNext('td')
-            debtvalue = yrchange.findNext('td')
-            revenue = debtvalue.findNext('td')
-            operinc = revenue.findNext('td')
-            d = collections.OrderedDict()
-            d['rank'] = rank.renderContents().strip()
-            d['team'] = team.find('h3').find('a').renderContents().strip()
-            d['value'] = value.renderContents().strip()
-            d['yrchange'] = yrchange.renderContents().strip()
-            d['debtvalue'] = debtvalue.renderContents().strip()
-            d['revenue'] = revenue.renderContents().strip()
-            d['operinc'] = operinc.renderContents().strip()
-            object_list.append(d)
+            tds = row.findAll('td')
+            rank = tds[0].getText()
+            team = tds[1].getText()
+            value = tds[2].getText().replace(',','') # value needs some mixing and to a float. 
+            append_list.append("{0}. {1} ({2})".format(rank, ircutils.bold(team), self._millify(float(value)*(1000000))))
         
-        irc.reply(ircutils.mircColor("Current NFL Team Values", 'red'))
-        
-        for N in self._batch(object_list, 7):
-            irc.reply(' '.join(str(str(n['rank']) + "." + " " + ircutils.bold(n['team'])) + " (" + n['value'] + "M)" for n in N))        
+        header = ircutils.mircColor("Current NFL Team Values", 'red')
+        irc.reply("{0} :: {1}".format(header, " | ".join(append_list)))
+              
             
     nflvaluations = wrap(nflvaluations)
 
