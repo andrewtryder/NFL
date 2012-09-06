@@ -2028,7 +2028,9 @@ class NFL(callbacks.Plugin):
 
 
     def nflgame(self, irc, msg, args, optplayer):
-        """Display NFL player's game log from last game played'"""
+        """[player]
+        Display NFL player's game log for current/active game. Ex: Eli Manning
+        """
         
         optplayer = optplayer.lower().strip()
         
@@ -2038,7 +2040,7 @@ class NFL(callbacks.Plugin):
             irc.reply("No player found for: %s" % optplayer)
             return
         
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lk') + '/%s/' % lookupid
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
 
         try:        
             req = urllib2.Request(url)
@@ -2046,24 +2048,26 @@ class NFL(callbacks.Plugin):
         except:
             irc.reply("Failed to open: %s" % url)
             return
-    
-        html = html.replace('tr class="evenrow','tr class="oddrow')
-
-        if "No stats available." in html:
-            irc.reply("No stats available for: %s" % optplayer)
-            return
             
         soup = BeautifulSoup(html)
-        playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
-        table = soup.find('table', attrs={'class':'tablehead'})
-        headings = table.findAll('tr', attrs={'class':'colhead'})
-        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow')})
+        h4 = soup.find('h4', text="CURRENT GAME")
+        if not h4:
+            irc.reply("I could not find game statistics for: %s. Player not playing?" % optplayer)
+            return
 
-        heading = headings[-1].findAll('td') # last, findall.
-        row = rows[-1].findAll('td') # mate with what is coming out.
+        div = h4.findParent('div').findParent('div')
+        gameTime = div.find('li', attrs={'class':'game-clock'})
+        gameTimeSpan = gameTime.find('span')
+        if gameTimeSpan:
+            gameTimeSpan.extract()
+
+        table = div.find('table', attrs={'class':'tablehead'})
+        header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
+        row = table.findAll('tr')[1].findAll('td')[1:]
+
+        output = string.join([ircutils.bold(each.getText()) + ": " + row[i].getText() for i,each in enumerate(header)], " | ")
         
-        output = string.join([ircutils.bold(each.text) + ": " + row[i].text for i,each in enumerate(heading)], " | ")
-        irc.reply(ircutils.mircColor(playername, 'red') + " :: " + output)
+        irc.reply("{0} :: {1} ({2} ({3}))".format(ircutils.mircColor(optplayer.title(), 'red'), output, gameTime.getText(), gameTimeSpan.getText()))
     
     nflgame = wrap(nflgame, [('text')])
 
