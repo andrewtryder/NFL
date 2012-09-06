@@ -2052,8 +2052,18 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html)
         h4 = soup.find('h4', text="CURRENT GAME")
         if not h4:
-            irc.reply("I could not find game statistics for: %s. Player not playing?" % optplayer)
-            return
+            nextGame = soup.find('h4', text="NEXT GAME")
+            if nextGame:
+                gameTime = soup.find('div', attrs={'class':'time'})
+                if gameTime:
+                    irc.reply("{0} is not playing. Next game is at: {1}".format(optplayer.title(), gameTime.renderContents().replace('<br />',' ')))
+                    return
+                else:
+                    irc.reply("I could not find game statistics for: %s. Player not playing?" % optplayer.title())
+                    return
+            else: 
+                irc.reply("I could not find game statistics for: %s. Player not playing?" % optplayer.title())
+                return
 
         div = h4.findParent('div').findParent('div')
         gameTime = div.find('li', attrs={'class':'game-clock'})
