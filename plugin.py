@@ -1376,7 +1376,7 @@ class NFL(callbacks.Plugin):
         print averageAge
         print averageExp
         
-    nflroster = wrap(nflroster, [getopts({'number', ('int')}), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
+    nflroster = wrap(nflroster, [(getopts({'number': ('int')})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
 
 
     def nflteamnews(self, irc, msg, args, optteam):
@@ -1613,10 +1613,15 @@ class NFL(callbacks.Plugin):
         
     nflpowerrankings = wrap(nflpowerrankings)
 
-    def nflschedule(self, irc, msg, args, optteam):
+    def nflschedule(self, irc, msg, args, optlist, optteam):
         """[team]
         Display the last and next five upcoming games for team.
         """
+        
+        fullSchedule = False
+        for (option, arg) in optlist:
+            if option == 'full':
+                fullSchedule = True
         
         optteam = optteam.upper().strip()
 
@@ -1624,46 +1629,90 @@ class NFL(callbacks.Plugin):
             irc.reply("Team not found. Must be one of: %s" % self._validteams())
             return
             
-        lookupteam = self._translateTeam('yahoo', 'team', optteam) # (db, column, optteam)
+        lookupteam = self._translateTeam('yahoo', 'team', optteam) # don't need a check for 0 here because we validate prior.
         
-        url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/calendar/rss.xml' % lookupteam
+        if fullSchedule: # diff url/method.
+
+            url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%/schedule'
+
+            try:
+                request = urllib2.Request(url)
+                html = (urllib2.urlopen(request)).read()
+            except:
+                irc.reply("Failed to open: %s" % url)
+                return
+                
+            soup = BeautifulSoup(html)
+
+            table = soup.find('table', attrs={'summary':'Regular Season Games'})
+            
+            if not table:
+                irc.reply("Failed to find schedule.")
+                return
+                
+            tbody = table.find('tbody')
+            rows = tbody.findAll('tr')
+
+            append_list = []
+
+            for row in rows:
+                tds = row.findAll('td')
+                week = tds[0]
+                if row.find('td', attrs={'class':'title bye'}):
+                    date = "BYE"
+                    opp = ""
+                    score = ""
+                else:
+                    date = tds[1].getText()
+                    dateSplit = date.split(',', 1)
+                    date = dateSplit[1]
+                    opp = tds[2].find('span').getText() # full
+                    score = tds[3].getText()
+    
+                appendString = "W{0} {1} {2} {3}".format(week.getText(), date.strip(), opp.strip(), score.strip())
+    
+                append_list.append(appendString)
+
+            descstring = string.join([item for item in append_list], " | ")
+            output = "{0} {1}".format(ircutils.bold(optteam), descstring)
+            irc.reply(output)
+
+        else:
+            url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/calendar/rss.xml' % lookupteam
         
-        try:
-            req = urllib2.Request(url)
-            response = urllib2.urlopen(req)
-            html = response.read()
-        except:
-            irc.reply("Cannot open: %s" % url)
-            return
+            try:
+                req = urllib2.Request(url)
+                response = urllib2.urlopen(req)
+                html = response.read()
+            except:
+                irc.reply("Cannot open: %s" % url)
+                return
 
-        # clean this stuff up
-        html = html.replace('<![CDATA[','') #remove cdata
-        html = html.replace(']]>','') # end of cdata
-        html = html.replace('EDT','') # tidy up times
-        html = html.replace('\xc2\xa0',' ') # remove some stupid character.
+            # clean this stuff up
+            html = html.replace('<![CDATA[','').replace(']]>','').replace('EDT','').replace('\xc2\xa0',' ')
 
-        soup = BeautifulSoup(html)
-        items = soup.find('channel').findAll('item')
+            soup = BeautifulSoup(html)
+            items = soup.find('channel').findAll('item')
         
-        append_list = []
+            append_list = []
 
-        for item in items:
-            title = item.find('title').renderContents().strip() # title is good.
-            day, date = title.split(',')
-            desc = item.find('description') # everything in desc but its messy.
-            desctext = desc.findAll(text=True) # get all text, first, but its in a list.
-            descappend = (''.join(desctext).strip()) # list transform into a string.
-            if not descappend.startswith('@'): # if something is @, it's before, but vs. otherwise.
-                descappend = 'vs. ' + descappend
-            descappend += " [" + date.strip() + "]"
-            append_list.append(descappend) # put all into a list.
+            for item in items:
+                title = item.find('title').renderContents().strip() # title is good.
+                day, date = title.split(',')
+                desc = item.find('description') # everything in desc but its messy.
+                desctext = desc.findAll(text=True) # get all text, first, but its in a list.
+                descappend = (''.join(desctext).strip()) # list transform into a string.
+                if not descappend.startswith('@'): # if something is @, it's before, but vs. otherwise.
+                    descappend = 'vs. ' + descappend
+                descappend += " [" + date.strip() + "]"
+                append_list.append(descappend) # put all into a list.
 
         
-        descstring = string.join([item for item in append_list], " | ")
-        output = "{0} {1}".format(ircutils.bold(optteam), descstring)
-        irc.reply(output)
+            descstring = string.join([item for item in append_list], " | ")
+            output = "{0} {1}".format(ircutils.bold(optteam), descstring)
+            irc.reply(output)
 
-    nflschedule = wrap(nflschedule, [('somethingWithoutSpaces')])
+    nflschedule = wrap(nflschedule, [(getopts({'full':''})), ('somethingWithoutSpaces')])
 
 
     def nfldraft(self, irc, msg, args, optyear, optround):
@@ -2062,7 +2111,11 @@ class NFL(callbacks.Plugin):
         except:
             irc.reply("Failed to open: %s" % url)
             return
-            
+        
+        if "No statistics available." in html:
+            irc.reply("Sorry, no statistics found on the page for: %s" % optplayer.title())
+            return
+        
         soup = BeautifulSoup(html)
         h4 = soup.find('h4', text="CURRENT GAME")
         if not h4:
