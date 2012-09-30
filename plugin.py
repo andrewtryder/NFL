@@ -19,6 +19,7 @@ import datetime
 import json
 import sqlite3
 import os
+import unicodedata
 
 # supybot libs
 import supybot.utils as utils
@@ -49,6 +50,10 @@ class NFL(callbacks.Plugin):
             return True
         except ValueError:
             return False
+
+    def _remove_accents(self, data):
+        nkfd_form = unicodedata.normalize('NFKD', unicode(data))
+        return u"".join([c for c in nkfd_form if not unicodedata.combining(c)])
 
     def _b64decode(self, string):
         """Returns base64 encoded string."""
@@ -2220,7 +2225,7 @@ class NFL(callbacks.Plugin):
             extraPlayerNews = playerNews.find('div', attrs={'style':'font-style:italic;'})
             if extraPlayerNews: # clean it up.
                 extraPlayerNews.extract()
-                playerNews = ' '.join(str(playerNews.getText()).split()) # for some reason, rotowire has many spaces in its reports.
+                playerNews = ' '.join(str(self._remove_accents(playerNews.getText())).split()) # for some reason, rotowire has many spaces in its reports.
             else:
                 playerNews = "No news found for player"
     
