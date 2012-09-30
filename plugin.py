@@ -332,6 +332,7 @@ class NFL(callbacks.Plugin):
         except:
             irc.reply("Failed to open: %s" % url)
             return
+        
             
         html = html.replace('&nbsp;','').replace('NY JETS', 'NYJ').replace('NY GIANTS', 'NYG').replace('ARZ', 'ARI')
 
@@ -2104,6 +2105,8 @@ class NFL(callbacks.Plugin):
             return
         
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
+        
+        #self.log.info(url)
 
         try:        
             req = urllib2.Request(url)
@@ -2119,33 +2122,28 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html)
         h4 = soup.find('h4', text="CURRENT GAME")
         if not h4:
-            nextGame = soup.find('h4', text="NEXT GAME")
-            if nextGame:
-                gameTime = soup.find('div', attrs={'class':'time'})
-                if gameTime:
-                    irc.reply("{0} is not playing. Next game is at: {1}".format(optplayer.title(), gameTime.renderContents().replace('<br />',' ')))
-                    return
-                else:
-                    irc.reply("I could not find game statistics for: %s. Player not playing?" % optplayer.title())
-                    return
-            else: 
-                irc.reply("I could not find game statistics for: %s. Player not playing?" % optplayer.title())
+            h4 = soup.find('h4', text="PREVIOUS GAME")
+            if not h4: 
+                irc.reply("I could not find game statistics for: %s. Player not playing? Also try nflgamelog command." % optplayer.title())
                 return
 
         div = h4.findParent('div').findParent('div')
-        gameTime = div.find('li', attrs={'class':'game-clock'})
-        gameTimeSpan = gameTime.find('span')
-        if gameTimeSpan:
-            gameTimeSpan.extract()
+        gameTime = False
+        #gameTime = div.find('li', attrs={'class':'game-clock'})
+        #gameTimeSpan = gameTime.find('span')
+        #if gameTimeSpan:
+        #    gameTimeSpan.extract()
 
         table = div.find('table', attrs={'class':'tablehead'})
         header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
         row = table.findAll('tr')[1].findAll('td')[1:]
 
         output = string.join([ircutils.bold(each.getText()) + ": " + row[i].getText() for i,each in enumerate(header)], " | ")
-        
-        irc.reply("{0} :: {1} ({2} ({3}))".format(ircutils.mircColor(optplayer.title(), 'red'), output, gameTime.getText(), gameTimeSpan.getText()))
-    
+        if gameTime:
+            irc.reply("{0} :: {1} ({2} ({3}))".format(ircutils.mircColor(optplayer.title(), 'red'), output, gameTime.getText(), gameTimeSpan.getText()))
+        else:
+            irc.reply("{0} :: {1}".format(ircutils.mircColor(optplayer.title(), 'red'), output))
+            
     nflgame = wrap(nflgame, [('text')])
 
 
