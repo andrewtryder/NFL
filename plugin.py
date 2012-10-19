@@ -320,16 +320,16 @@ class NFL(callbacks.Plugin):
     
     def nflweather(self, irc, msg, args, optteam):
         """[team]
-        Display weather for the next game with a specific team.
+        Display weather for the next game. Ex: NE
         """
         
-        optteam = optteam.upper().strip()
+        optteam = optteam.upper()
 
         if optteam not in self._validteams():
             irc.reply("Team not found. Must be one of: %s" % self._validteams())
             return
                
-        url = self._b64decode('aHR0cDovL3d3dy52ZWdhc2luc2lkZXIuY29tL25mbC93ZWF0aGVyLw==')
+        url = self._b64decode('aHR0cDovL3d3dy5uZmx3ZWF0aGVyLmNvbS8=')
 
         try:
             req = urllib2.Request(url)
@@ -339,38 +339,32 @@ class NFL(callbacks.Plugin):
             return
         
             
-        html = html.replace('&nbsp;','').replace('NY JETS', 'NYJ').replace('NY GIANTS', 'NYG').replace('ARZ', 'ARI')
-
         soup = BeautifulSoup(html)
-        table = soup.find('td', attrs={'class':'viBodyBorderNorm'}).find('table', attrs={'width':'100%'})
-        rows = table.findAll('tr')[1:]
-
-        new_data = collections.defaultdict(list)
-
-        for row in rows:
-            teams = row.find('td')    
-            matches = re.search('<b>(.*?)\s.*?</b>.*?<b>(.*?)\s.*?</b><br />(.*?)ET', teams.renderContents(), re.I|re.S|re.M)
-            t1 = " ".join(matches.group(1).split()) # find matches and remove n+1 spaces.
-            t2 = " ".join(matches.group(2).split()) # ' '.join(content.split(' ')[:-1])
-            time = " ".join(matches.group(3).split())
+        table = soup.find('table', attrs={'class':'main'})
+        if not table:
+            irc.reply("Something broke in formatting with nflweather.")
+            return
             
-            weather = teams.findNext('td').findNext('td')
-            wind = weather.findNext('td')
-            temp = wind.findNext('td')
-            humid = temp.findNext('td')
-    
-            if humid.getText() == "Indoors": # conditional on weather for dome/indoors.
-                weatherString = "INDOORS"
-            else:
-                weatherString = weather.getText() + " " + wind.getText() + ". Temp: " + temp.getText() + "F"
-        
-            new_data[str(t1)].append(str(t1 + "@" + ircutils.underline(t2) + " :: " + time + " " + weatherString))
-            new_data[str(t2)].append(str(t1 + "@" + ircutils.underline(t2) + " :: " + time + " " + weatherString))
+        tbody = table.find('tbody')
+        rows = tbody.findAll('tr')
 
-        output = new_data.get(optteam, None)
+        weatherList = collections.defaultdict(list)
+
+        for row in rows: # grab all, parse, throw into a defaultdict for get method.
+            tds = row.findAll('td')
+            awayTeam = str(self._translateTeam('team', 'short', tds[0].getText())) # translate into the team for each.
+            homeTeam = str(self._translateTeam('team', 'short', tds[4].getText()))
+            timeOrScore = tds[5].getText()
+            gameTemp = tds[8].getText()
+    
+            appendString = "{0}@{1} - {2} - {3}".format(awayTeam, ircutils.bold(homeTeam), timeOrScore, gameTemp) # one string, put into key:value based on teams.
+            weatherList[awayTeam].append(appendString)
+            weatherList[homeTeam].append(appendString)
+    
+        output = weatherList.get(optteam, None)
         
         if output is None:
-            irc.reply("No weather found for: %s. Game already played?" % optteam)
+            irc.reply("No weather found for: %s. Team on bye?" % optteam)
         else:
             irc.reply(" ".join(output))
 
@@ -1629,8 +1623,8 @@ class NFL(callbacks.Plugin):
             if option == 'full':
                 fullSchedule = True
         
-        optteam = optteam.upper().strip()
-
+        optteam = optteam.upper()
+        
         if optteam not in self._validteams():
             irc.reply("Team not found. Must be one of: %s" % self._validteams())
             return
@@ -1638,8 +1632,7 @@ class NFL(callbacks.Plugin):
         lookupteam = self._translateTeam('yahoo', 'team', optteam) # don't need a check for 0 here because we validate prior.
         
         if fullSchedule: # diff url/method.
-
-            url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%/schedule'
+            url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/schedule' % lookupteam
 
             try:
                 request = urllib2.Request(url)
@@ -1649,11 +1642,10 @@ class NFL(callbacks.Plugin):
                 return
                 
             soup = BeautifulSoup(html)
-
             table = soup.find('table', attrs={'summary':'Regular Season Games'})
             
             if not table:
-                irc.reply("Failed to find schedule.")
+                irc.reply("ERROR: Failed to find schedule for: %s") % optteam
                 return
                 
             tbody = table.find('tbody')
@@ -1664,25 +1656,32 @@ class NFL(callbacks.Plugin):
             for row in rows:
                 tds = row.findAll('td')
                 week = tds[0]
+                
                 if row.find('td', attrs={'class':'title bye'}):
                     date = "BYE"
                     opp = ""
                     score = ""
+                    appendString = "W{0}-{1}".format(ircutils.bold(week.getText()), ircutils.underline("BYE"))
                 else:
                     date = tds[1].getText()
-                    dateSplit = date.split(',', 1)
+                    dateSplit = date.split(',', 1) # take the date, dump the rest.
                     date = dateSplit[1]
-                    opp = tds[2].find('span').getText() # full
-                    score = tds[3].getText()
-    
-                appendString = "W{0} {1} {2} {3}".format(week.getText(), date.strip(), opp.strip(), score.strip())
-    
+                    opp = tds[2] # with how the Tag/string comes in, we need to extract one part and format the other.
+                    oppName = opp.find('span')
+                    if oppName:
+                        oppName.extract()
+                    oppTeam = opp.find('a').getText() 
+                    #opp = tds[2].find('span').getText()
+                    #opp = self._translateTeam('team','full', opp) # use the db to make a full team small.
+                    score = tds[3].getText().replace('EDT','').replace('EST','').replace('pm','').replace('am','') # strip the garbage
+                    #score = score.replace('W', ircutils.mircColor('W', 'green')).replace('L', ircutils.mircColor('L', 'red'))
+                    appendString = "W{0}-{1} {2} {3}".format(ircutils.bold(week.getText()), date.strip(), oppTeam.strip(), score.strip())
+                
                 append_list.append(appendString)
 
             descstring = string.join([item for item in append_list], " | ")
-            output = "{0} {1}".format(ircutils.bold(optteam), descstring)
+            output = "{0} SCHED :: {1}".format(ircutils.mircColor(optteam, 'red'), descstring)
             irc.reply(output)
-
         else:
             url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/calendar/rss.xml' % lookupteam
         
@@ -2125,15 +2124,22 @@ class NFL(callbacks.Plugin):
             return
         
         soup = BeautifulSoup(html)
+        
+        currentGame, previousGame = True, True # booleans for below. 
         h4 = soup.find('h4', text="CURRENT GAME")
         if not h4:
             h4 = soup.find('h4', text="PREVIOUS GAME")
             if not h4: 
                 irc.reply("I could not find game statistics for: %s. Player not playing? Also try nflgamelog command." % optplayer.title())
                 return
+            else:
+                previousGame = True
+        else:
+            currentGame = True
 
         div = h4.findParent('div').findParent('div')
         gameTime = False
+        # <div class="game-details"><div class="venue">Lambeau Field</div><div class="time">Sun, Sept 30<br>Final</div><div class="overview" style="padding-left:90px;"><div class="team team-away"><a href="http://espn.go.com/nfl/team/_/name/no/new-orleans-saints"><div class="logo logo-medium logo-nfl-medium nfl-medium-18"></div></a><div class="record"><h6 style="padding-left:25px;font-size:16px;">27</h6></div></div><div class="symbol">@</div><div class="team team-home"><a href="http://espn.go.com/nfl/team/_/name/gb/green-bay-packers"><div class="logo logo-medium logo-nfl-medium nfl-medium-9"></div></a><div class="record"><h6 style="padding-right:25px;font-size:16px;">28</h6></div></div></div><p class="links"><a href="/nfl/recap?gameId=320930009">Recap »</a><a href="/nfl/boxscore?gameId=320930009">Box&nbsp;Score »</a></p></div>
         #gameTime = div.find('li', attrs={'class':'game-clock'})
         #gameTimeSpan = gameTime.find('span')
         #if gameTimeSpan:
@@ -2262,8 +2268,6 @@ class NFL(callbacks.Plugin):
             except:
                 irc.reply("Failed to open: %s" % url)
                 return
-                                
-            #html = html.replace('class="ind alt"','class="ind"')
 
             soup = BeautifulSoup(html)
             team = soup.find('td', attrs={'class':'teamHeader'}).find('b')
