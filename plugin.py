@@ -2416,19 +2416,35 @@ class NFL(callbacks.Plugin):
             
     nflcareerstats = wrap(nflcareerstats, [('text')])
     
-
-    def nflseasonstats(self, irc, msg, args, optyear, optplayer):
-        """[year] [player]
-        Look up NFL Season stats for a player. Ex: nflplayer 2010 tom brady
+    
+    def nflseason(self, irc, msg, args, optlist, optplayer):
+        """<--year DDDD> [player]
+        Look up NFL Season stats for a player. Ex: nflseason tom brady.
+        To look up a different year, use --year YYYY. Ex: nflseason --year 2010 tom brady
         """
         
-        if optyear: # check our year. validate below.
-            testdate = self._validate(optyear, '%Y')
-            if not testdate:
-                irc.reply("Invalid year. Must be YYYY.")
-                return
+        season = False
+        
+        if optlist:
+            for (key,value) in optlist:
+                if key == 'year': # check our year. validate below.
+                    season = self._validate(str(value), '%Y')
+                    if not season:
+                        irc.reply("%s is an invalid year. Must be YYYY." % value)
+                        return
+                    else:
+                        season = str(value)
+        
+        if not season:
+            # Season stats do not appear until after the first week of games, which is always going to be first weekend in September
+            # So, we account for this using September 9 of each year as the time to use the current year, otherwise, subtract 1 year.
+            if datetime.datetime.now().month < 9 and datetime.datetime.now().day < 9:
+                season = str(datetime.datetime.now().year - 1)
+            else:
+                season = str(datetime.datetime.now().year)            
 
-        optplayer = optplayer.lower().strip()
+        # now, handle the rest.
+        optplayer = optplayer.lower()
         
         lookupid = self._playerLookup('eid', optplayer)
         
@@ -2464,10 +2480,10 @@ class NFL(callbacks.Plugin):
 
         seasonlist = [str(i.find('td').string) for i in rows] # cheap list to find the index for a year.
 
-        if optyear in seasonlist:
-            yearindex = seasonlist.index(optyear)
+        if season in seasonlist:
+            yearindex = seasonlist.index(season)
         else:
-            irc.reply("No season stats found for: %s in %s" % (optplayer, optyear))
+            irc.reply("No season stats found for: %s in %s" % (optplayer, season))
             return
             
         heading = headings[0].findAll('td') # first table, first row is the heading.
@@ -2475,8 +2491,8 @@ class NFL(callbacks.Plugin):
 
         output = string.join([ircutils.bold(each.text) + ": " + row[i].text for i,each in enumerate(heading)], " | ")
         irc.reply(ircutils.mircColor(playername, 'red') + " :: " + output)
-            
-    nflseasonstats = wrap(nflseasonstats, [('somethingWithoutSpaces'), ('text')])
+
+    nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
     
     
     def nfltrans(self, irc, msg, args, optdate):
