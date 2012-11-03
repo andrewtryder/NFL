@@ -24,8 +24,5 @@ def configure(advanced):
 NFL = conf.registerPlugin('NFL')
 conf.registerGlobalValue(NFL, 'dbLocation', registry.String(os.path.abspath(os.path.dirname(__file__)) + '/nfl.db', """Absolute path for nfl.db sqlite3 database file location."""))
 conf.registerGlobalValue(NFL, 'nflPlayersDb', registry.String(os.path.abspath(os.path.dirname(__file__)) + '/nfl_players.db', """Absolute path for nflplayers.db sqlite3 database file location."""))
-conf.registerGlobalValue(NFL, 'ffApiKey', registry.String('', """api key for fanfeedr.com""", private=True))
-
-
 
 # vim:set shiftwidth=4 tabstop=4 expandtab textwidth=250:
