@@ -1379,6 +1379,51 @@ class NFL(callbacks.Plugin):
     nflroster = wrap(nflroster, [(getopts({'number': ('int')})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
 
 
+    def nflplayoffs(self, irc, msg, args):
+        """
+        Display the current NFL playoff match-ups if the season ended today.
+        """
+
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9zdGFuZGluZ3MvXy90eXBlL3BsYXlvZmZzL3NvcnQvY29uZmVyZW5jZVJhbmsvb3JkZXIvZmFsc2U=')
+
+        try:
+            request = urllib2.Request(url)
+            html = (urllib2.urlopen(request)).read()
+        except:
+            irc.reply("Failed to open url: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        
+        if not soup.find('table', attrs={'class':'tablehead', 'cellpadding':'3'}):
+            irc.reply("Failed to find table for parsing.")
+            return
+
+        table = soup.find('table', attrs={'class':'tablehead', 'cellpadding':'3'})
+        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')}) 
+
+        nflplayoffs = collections.defaultdict(list)
+
+        for row in rows: # now build the list. table has rows with the order. we work with 1-6 below when outputting.
+            conf = row.findPrevious('tr', attrs={'class':'stathead'}).find('td', attrs={'colspan':'13'})
+            conf = str(conf.getText().replace('National Football Conference','NFC').replace('American Football Conference','AFC'))
+            
+            tds = row.findAll('td') # now get td in each row for making into the list
+            rank = tds[0].getText()
+            team = tds[1].getText() # short.
+            #self.log.info(str(team))
+            #team = self._translateTeam('team', 'short', team)
+            reason = tds[10].getText()
+            appendString = "{0}".format(team)
+            nflplayoffs[conf].append(appendString)
+
+        for i,x in nflplayoffs.iteritems():
+            matchups = "{6} :: Byes: {4} and {5} / Wild-Card Matchups: {3} @ {0} / {2} @ {1}".format(x[2], x[3], x[4], x[5], x[0], x[1], ircutils.mircColor(i, 'red'))
+            irc.reply(matchups)
+
+    nflplayoffs = wrap(nflplayoffs)
+
+
     def nflteamtrans(self, irc, msg, args, optteam):
         """[team]
         Shows recent NFL transactions for [team]. Ex: CHI
