@@ -36,6 +36,33 @@ class NFL(callbacks.Plugin):
     """Add the help for "@plugin help NFL" here
     This should describe *how* to use this plugin."""
     threaded = True
+
+    def _unescape(self, text):
+        """Created by Fredrik Lundh (http://effbot.org/zone/re-sub.htm#unescape-html)"""
+        
+        import re, htmlentitydefs
+        
+        text = text.replace("\n", " ")
+        
+        def fixup(m):
+            text = m.group(0)
+            if text[:2] == "&#":
+                # character reference
+                try:
+                    if text[:3] == "&#x":
+                        return unichr(int(text[3:-1], 16))
+                    else:
+                        return unichr(int(text[2:-1]))
+                except (ValueError, OverflowError):
+                    pass
+            else:
+                # named entity
+                try:
+                    text = unichr(htmlentitydefs.name2codepoint[text[1:-1]])
+                except KeyError:
+                    pass
+            return text # leave as is
+        return re.sub("&#?\w+;", fixup, text)
     
     # http://code.activestate.com/recipes/303279/#c7
     def _batch(self, iterable, size):
@@ -170,6 +197,41 @@ class NFL(callbacks.Plugin):
 
     football = wrap(football)
     
+    
+    def marcd(self, irc, msg, args):
+        """
+        Display a random quote from a funny guy.
+        """
+        
+        from random import choice
+    
+        url = 'https://docs.google.com/document/pub?id=1CJJnIY_QCrlAxLoGZlBaMg7xOK4upoFLw9y9WmX4E8M'
+
+        try:
+            headers={'User-Agent':' Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firefox/12.0'}
+            req = urllib2.Request(url, None, headers)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        quotes = soup.findAll('p', attrs={'class':re.compile('^c.*?')})
+
+        append_list = []
+
+        for quote in quotes:
+            quote = quote.getText().replace(u'&#39;',"'").replace(u'&quot;','"') #.encode('ascii', 'replace')
+            #quote = quote.replace('&#39;',"'").replace('&quot;','\"') #.replace(u'\u2019', '\'')
+            #quote = quote.text.encode('ascii', 'ignore')
+            if len(quote) > 1: # we have empties here because of the regex above. Only way to discard empty quotes here.
+                append_list.append(self._unescape(quote))
+
+
+        output = choice(append_list)
+        irc.reply(output)
+    
+    marcd = wrap(marcd)
     
     def nflawards(self, irc, msg, args, optyear):
         """[year]
@@ -2039,10 +2101,8 @@ class NFL(callbacks.Plugin):
         db = sqlite3.connect(db_filename)
         cursor = db.cursor()
         
-        optplayer = optplayer.lower().strip()
+        optplayer = optplayer.lower()
 
-        #cursor.execute("select id from players where name='?'", ([optplayer]))
-        
         query = "select id, name from players WHERE name LIKE '%%%s%%'" % optplayer
         cursor.execute(query)
         
@@ -2336,7 +2396,7 @@ class NFL(callbacks.Plugin):
         Display NFL contract for Player Name. Ex: Ray Lewis
         """
 
-        optplayer = optplayer.lower().strip()
+        optplayer = optplayer.lower()
         
         lookupid = self._playerLookup('rid', optplayer)
         
@@ -2357,7 +2417,7 @@ class NFL(callbacks.Plugin):
         pn = soup.find('div', attrs={'class':'playercard',  'style':'display:none;', 'id': re.compile('^cont_.*')})
 
         if not pn:
-            irc.reply("No contract found for: %s" % player)
+            irc.reply("No contract found for: %s" % optplayer)
             return
 
         p1 = pn.find('div', attrs={'class': 'report'}).renderContents().strip()
