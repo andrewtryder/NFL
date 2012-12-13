@@ -36,33 +36,6 @@ class NFL(callbacks.Plugin):
     """Add the help for "@plugin help NFL" here
     This should describe *how* to use this plugin."""
     threaded = True
-
-    def _unescape(self, text):
-        """Created by Fredrik Lundh (http://effbot.org/zone/re-sub.htm#unescape-html)"""
-        
-        import re, htmlentitydefs
-        
-        text = text.replace("\n", " ")
-        
-        def fixup(m):
-            text = m.group(0)
-            if text[:2] == "&#":
-                # character reference
-                try:
-                    if text[:3] == "&#x":
-                        return unichr(int(text[3:-1], 16))
-                    else:
-                        return unichr(int(text[2:-1]))
-                except (ValueError, OverflowError):
-                    pass
-            else:
-                # named entity
-                try:
-                    text = unichr(htmlentitydefs.name2codepoint[text[1:-1]])
-                except KeyError:
-                    pass
-            return text # leave as is
-        return re.sub("&#?\w+;", fixup, text)
     
     # http://code.activestate.com/recipes/303279/#c7
     def _batch(self, iterable, size):
@@ -197,42 +170,7 @@ class NFL(callbacks.Plugin):
 
     football = wrap(football)
     
-    
-    def marcd(self, irc, msg, args):
-        """
-        Display a random quote from a funny guy.
-        """
-        
-        from random import choice
-    
-        url = 'https://docs.google.com/document/pub?id=1CJJnIY_QCrlAxLoGZlBaMg7xOK4upoFLw9y9WmX4E8M'
 
-        try:
-            headers={'User-Agent':' Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firefox/12.0'}
-            req = urllib2.Request(url, None, headers)
-            html = (urllib2.urlopen(req)).read()
-        except:
-            irc.reply("Failed to open: %s" % url)
-            return
-            
-        soup = BeautifulSoup(html)
-        quotes = soup.findAll('p', attrs={'class':re.compile('^c.*?')})
-
-        append_list = []
-
-        for quote in quotes:
-            quote = quote.getText().replace(u'&#39;',"'").replace(u'&quot;','"') #.encode('ascii', 'replace')
-            #quote = quote.replace('&#39;',"'").replace('&quot;','\"') #.replace(u'\u2019', '\'')
-            #quote = quote.text.encode('ascii', 'ignore')
-            if len(quote) > 1: # we have empties here because of the regex above. Only way to discard empty quotes here.
-                append_list.append(self._unescape(quote))
-
-
-        output = choice(append_list)
-        irc.reply(output)
-    
-    marcd = wrap(marcd)
-    
     def nflawards(self, irc, msg, args, optyear):
         """[year]
         Display NFL Awards for a specific year. Use a year from 1966 on. Ex: 2003
@@ -431,264 +369,73 @@ class NFL(callbacks.Plugin):
             irc.reply(" ".join(output))
 
     nflweather = wrap(nflweather, [('somethingWithoutSpaces')])        
-    
-    
-    def nflffpointleaders(self, irc, msg, args):
-        """
-        Display weekly FF point leaders.
-        Note "Season Leaders" totals are not updated until each week is final (Tuesday AM).
-        """
-        
-        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9sZWFkZXJz')
 
+    
+    def nflgamelog(self, irc, msg, args, optlist, optplayer):
+        """<player>
+        Display gamelogs from previous # of games.
+        """
+
+        lookupid = self._playerLookup('eid', optplayer.lower())
+        
+        if lookupid == "0":
+            irc.reply("No player found for: %s" % optplayer)
+            return
+        
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lk') + '/%s/' % optplayer
+        
+        # handle getopts
+        if optlist:
+            for (key, value) in optlist:
+                if key == 'year': # year, test, optdate if true
+                    testdate = self._validate(value, '%Y')
+                    if not testdate:
+                        irc.reply("Invalid year. Must be YYYY.")
+                        return
+                    else:
+                        url += 'year/%s' % value
+                if key == 'games': # how many games?
+                    optgames = value
+
+        self.log.info(url)                    
+        
+        # try url. 
         try:
-            req = urllib2.Request(url)
-            html = (urllib2.urlopen(req)).read()
+            request = urllib2.Request(url)
+            html = (urllib2.urlopen(request)).read()
         except:
-            irc.reply("Failed to open: %s" % url)
+            irc.reply("Failed to load: %s" % url)
             return
-            
-        html = html.replace('&nbsp;',' ')
-    
+        
+        # process html, with some error checking.
         soup = BeautifulSoup(html)
-        table = soup.find('table', attrs={'id':'playertable_0'})
-        rows = table.findAll('tr')[2:12]
-
-        append_list = []
-        count = 1
-
-        for row in rows:
-            rank = count
-            player = row.find('td').find('a')
-            points = row.find('td', attrs={'class':'playertableStat appliedPoints sortedCell'})
-            append_list.append(str(rank) + ". " + ircutils.bold(player.getText()) + " (" + points.getText() + ")")
-            count += 1 # ++
-    
-        title = "Top 10 FF points:"
-        descstring = string.join([item for item in append_list], " | ") # put the list together.
-        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
-        irc.reply(output)
-    
-    nflffpointleaders = wrap(nflffpointleaders)
-    
-    
-    def nflffaddeddropped(self, irc, msg, args, opttype):
-        """<position>
-        Show the Top 15 most added / dropped. Add in optional position to show at each.
-        Position must be one of:
-        """
-        
-        validtypes = { 'QB':'0','RB':'2','WR':'4','TE':'6','D/ST':'16','K':'17','FLEX':'23'}
-        
-        if opttype and opttype not in validtypes:
-            irc.reply("Type must be one of: %s" % validtypes.keys())
-            return
-        
-        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9hZGRlZGRyb3BwZWQ=')
-            
-        if opttype:
-            url += '?&slotCategoryId=%s' % validtypes[opttype]
-        
-        try:
-            req = urllib2.Request(url)
-            html = (urllib2.urlopen(req)).read()
-        except:
-            irc.reply("Failed to open: %s" % url)
+        div = soup.find('div', attrs={'class':'mod-container mod-table mod-player-stats'})
+        if not div:
+            irc.reply("Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
             return
             
-        soup = BeautifulSoup(html)
-        table = soup.find('table', attrs={'class':'tableBody'})
-        rows = table.findAll('tr', attrs={'class':'tableBody'})[0:13] #15 is too many for a line.
-
-        added_list = []
-        dropped_list = []
-
-        for row in rows:
-            p1rank = row.find('td')
-            p1 = p1rank.findNext('td')
-            p1pos = p1.findNext('td')
-            p1last = p1pos.findNext('td')
-            p1cur = p1last.findNext('td')
-            p17day = p1cur.findNext('td')
-            space = p17day.findNext('td')
-            p2rank = space.findNext('td')
-            p2 = p2rank.findNext('td')
-            p2pos = p2.findNext('td')
-            p2last = p2pos.findNext('td')
-            p2cur = p2last.findNext('td')
-            p27day = p2cur.findNext('td')
-            added_list.append(p1.getText() + " (" + p17day.getText() + ")")
-            dropped_list.append(p2.getText() + " (" + p27day.getText() + ")")
-
-        addedstring = string.join([item for item in added_list], " | ") 
-        droppedstring = string.join([item for item in dropped_list], " | ") 
-
-        if opttype:
-            addedtitle = "Top 15 added at: %s" % opttype
-            droppedtitle = "Top 15 dropped at: %s" % opttype
-        else:
-            addedtitle = "Top 15 added"
-            droppedtitle = "Top 15 dropped"
-            
-        addedoutput = "{0} :: {1}".format(ircutils.mircColor(addedtitle, 'red'), addedstring)
-        irc.reply(addedoutput)
-        
-        droppedoutput = "{0} :: {1}".format(ircutils.mircColor(droppedtitle, 'red'), droppedstring)
-        irc.reply(droppedoutput)
-        
-    nflffaddeddropped = wrap(nflffaddeddropped, [optional('somethingWithoutSpaces')])        
-    
-    
-    def nflffpointsagainst(self, irc, msg, args, optlist, optposition):
-        """<--average|--totals> [position]
-        Fantasy Football Points Against. Shows by position. Can show average and totals with
-        switches.
-        """
-        
-        validpositions = {'QB':'1','RB':'2','WR':'3','TE':'4','K':'5','D/ST':'16'}
-        
-        if optposition not in validpositions:
-            irc.reply("Type must be one of: %s" % validpositions.keys())
-            return
-
-        averages, totals = True, False
-        for (option, arg) in optlist:
-            if option == 'averages':
-                averages, totals = True, False
-            if option == 'totals':
-                averages, totals = False, True
-
-        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9wb2ludHNhZ2FpbnN0') + '?positionId=%s' % validpositions[optposition]
-        
-        if totals and not averages:
-            url += '&statview=totals'
-        elif averages and not totals:
-            url += '&statview=averages'
-
-        try:
-            req = urllib2.Request(url)
-            html = (urllib2.urlopen(req)).read()
-        except:
-            irc.reply("Failed to open: %s" % url)
+        table = div.find('table', attrs={'class':'tablehead'})
+        if not table:
+            irc.reply("Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
             return
             
-        soup = BeautifulSoup(html)
-        table = soup.find('table', attrs={'id':'playertable_0'})
-        rows = table.findAll('tr')[2:12]  
+        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
+        header = table.find('tr', attrs={'class':'colhead'}).findAll('td') 
 
-        append_list = []
+        # object_list for ODs
+        object_list = []
+
+        for f,row in enumerate(rows):
+            d = collections.OrderedDict() # everything in an OD for calc/sort later.
+            tds = row.findAll('td') # all td in each row.
+            for td in tds:
+                d[str(header[i].getText())] = str(td.getText()) # inject all into the OD.
+            object_list.append(d) # each OD into object_list
         
-        for row in rows:
-            player = row.find('td').find('a')
-            points = row.find('td', attrs={'class':'playertableStat appliedPoints'})
-            append_list.append(ircutils.bold(player.getText()) + ": " + points.getText())
-            
-        descstring = string.join([item for item in append_list], " | ")
-        
-        irc.reply(descstring)
-            
-    nflffpointsagainst = wrap(nflffpointsagainst, [getopts({'averages':'','totals':''}), ('somethingWithoutSpaces')])
+        for each in object_list:
+            print each # # DATE	OPP	RESULT
     
-    
-    def nflffprojections(self, irc, msg, args, opttype):
-        """<position>
-        Player projections is based on recommended draft rankings, which take into account projected total points as well as upside and risk.
-        Position is optional. Can be one of: QB | RB | WR | TE | D/ST | K | FLEX
-        """
-  
-        validtypes = { 'QB':'0','RB':'2','WR':'4','TE':'6','D/ST':'16','K':'17','FLEX':'23'}
-        
-        if opttype and opttype not in validtypes:
-            irc.reply("Type must be one of: %s" % validtypes.keys())
-            return
-            
-        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC90b29scy9wcm9qZWN0aW9ucz8=')
-
-        if opttype:
-            url += '?&slotCategoryId=%s' % validtypes[opttype]
- 
-        try:
-            req = urllib2.Request(url)
-            html = (urllib2.urlopen(req)).read()
-        except:
-            irc.reply("Failed to open: %s" % opttype)
-            return
-            
-        html = html.replace('&nbsp;',' ')
-    
-        soup = BeautifulSoup(html)
-        table = soup.find('table', attrs={'id':'playertable_0'})
-        rows = table.findAll('tr')[2:12]
-
-        append_list = []
-
-        for row in rows:
-            rank = row.find('td')
-            player = rank.findNext('td')
-            projections = row.find('td', attrs={'class':'playertableStat appliedPoints'})
-            append_list.append(rank.getText() + ". " + ircutils.bold(player.getText()) + " (" + projections.getText() + ")")
-
-        descstring = string.join([item for item in append_list], " | ") # put the list together.
-
-        if opttype:
-            title = "Top 10 FF projections at: %s" % opttype
-        else:
-            title = "Top 10 FF projections"
-            
-        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
-        irc.reply(output)
-    
-    nflffprojections = wrap(nflffprojections, [optional('somethingWithoutSpaces')])
-    
-    
-    def nflffdraftresults(self, irc, msg, args, opttype):
-        """<position>
-        Displays the average position players were selected by team owners in Fantasy Football online drafts.
-        Position is optional. Can be one of: QB | TQB | RB | WR | TE | DT | DE | LB | CB | S | D/ST | K | P | HC | ALL
-        """
-        
-        validtypes = ['QB','TQB','RB','WR','TE','DT','DE','LB','CB','S','D/ST','K','P','HC','ALL']
-        
-        if opttype and opttype not in validtypes:
-            irc.reply("Type must be one of: %s" % validtypes)
-            return
-
-        url = self._b64decode('aHR0cDovL2dhbWVzLmVzcG4uZ28uY29tL2ZmbC9saXZlZHJhZnRyZXN1bHRz')
-        
-        if opttype:
-            url += '?position=%s' % opttype
-        
-
-        try:
-            req = urllib2.Request(url)
-            html = (urllib2.urlopen(req)).read()
-        except:
-            irc.reply("Failed to open: %s" % url)
-            return
-            
-        soup = BeautifulSoup(html)
-        table = soup.find('table', attrs={'class':'tableBody'})
-        headers = table.findAll('tr')[2]
-        rows = table.findAll('tr')[3:13]
-
-        append_list = []
-
-        for row in rows:
-            rank = row.find('td')
-            player = rank.findNext('td')
-            avgpick = player.findNext('td').findNext('td')
-            append_list.append(rank.getText() + ". " + ircutils.bold(player.getText()) + " (" + avgpick.getText() + ")")
-
-        descstring = string.join([item for item in append_list], " | ") # put the list together.
-
-        if not opttype:
-            opttype = 'ALL'
-
-        title = "Top 10 drafted at: %s" % opttype
-        output = "{0} :: {1}".format(ircutils.mircColor(title, 'red'), descstring)
-        irc.reply(output)
-        
-    nflffdraftresults = wrap(nflffdraftresults, [optional('somethingWithoutSpaces')])
+    nflgamelog = wrap(nflgamelog, [getopts({'year':'', 'games':''}), ('text')])
     
     
     def nflweeklyleaders(self, irc, msg, args):
@@ -1472,7 +1219,7 @@ class NFL(callbacks.Plugin):
             
             tds = row.findAll('td') # now get td in each row for making into the list
             rank = tds[0].getText()
-            team = tds[1].getText() # short.
+            team = tds[1].getText().replace('z -', '').replace('y -', '').replace('x -', '') # short.
             #self.log.info(str(team))
             #team = self._translateTeam('team', 'short', team)
             reason = tds[10].getText()
@@ -1480,7 +1227,8 @@ class NFL(callbacks.Plugin):
             nflplayoffs[conf].append(appendString)
 
         for i,x in nflplayoffs.iteritems():
-            matchups = "{6} :: Byes: {4} and {5} / Wild-Card Matchups: {3} @ {0} / {2} @ {1}".format(x[2], x[3], x[4], x[5], x[0], x[1], ircutils.mircColor(i, 'red'))
+            matchups = "{6} :: BYES: {4} and {5} | WC: {3} @ {0} & {2} @ {1} | In the Hunt: {7} & {8}".format(\
+                x[2], x[3], x[4], x[5], x[0], x[1], ircutils.mircColor(i, 'red'), x[6], x[7])
             irc.reply(matchups)
 
     nflplayoffs = wrap(nflplayoffs)
