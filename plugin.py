@@ -1186,6 +1186,43 @@ class NFL(callbacks.Plugin):
         print averageExp
         
     nflroster = wrap(nflroster, [(getopts({'number': ('int')})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
+    
+    
+    def nfldraftorder(self, irc, msg, args):
+        """
+        Display current NFL Draft order for next year's draft.
+        """
+        
+        url = self._b64decode('aHR0cDovL3d3dy5jYnNzcG9ydHMuY29tL25mbC9kcmFmdC9vcmRlcg==')
+        
+        try:
+            request = urllib2.Request(url)
+            html = (urllib2.urlopen(request)).read()
+        except:
+            irc.reply("Failed to open url: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        
+        # minor error checking
+        if not soup.find('table', attrs={'class':'data', 'width':'100%'}):
+            irc.reply("Something broke in formatting on the NFL Draft order page.")
+            return  
+            
+        table = soup.find('table', attrs={'class':'data', 'width':'100%'})
+        rows = table.findAll('tr', attrs={'class':re.compile('^row.*?')})
+
+        append_list = []
+
+        # list is in order, get and append.
+        for row in rows:
+            team = row.findAll('td')[3]
+            team = str(team.getText().strip().replace('N.Y.','NY')) # short?
+            append_list.append(team)
+
+        irc.reply("Next NFL Draft order: {0}".format(string.join([item for item in append_list], " | ")))
+        
+    nfldraftorder = wrap(nfldraftorder)
 
 
     def nflplayoffs(self, irc, msg, args):
