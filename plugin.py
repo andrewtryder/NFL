@@ -1188,12 +1188,25 @@ class NFL(callbacks.Plugin):
     nflroster = wrap(nflroster, [(getopts({'number': ('int')})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
     
     
-    def nfldraftorder(self, irc, msg, args):
-        """
+    def nfldraftorder(self, irc, msg, args, optlist):
+        """<--round #>
         Display current NFL Draft order for next year's draft.
+        Will default to display the first round. Use --round # to display another (1-7)
         """
         
-        url = self._b64decode('aHR0cDovL3d3dy5jYnNzcG9ydHMuY29tL25mbC9kcmFmdC9vcmRlcg==')
+        optround = "1" # by default, show round 1.
+        
+        # handle getopts.
+        if optlist:
+            for key, value in optlist:
+                if key == 'round':
+                    if value > 7 or value < 1:
+                        irc.reply("ERROR: Round must be between 1-7")
+                        return
+                    else:
+                        optround = value
+        
+        url = self._b64decode('aHR0cDovL3d3dy5mZnRvb2xib3guY29tL25mbF9kcmFmdA==') + '/' + str(datetime.datetime.now().year) + '/nfl_draft_order.cfm'
         
         try:
             request = urllib2.Request(url)
@@ -1205,24 +1218,37 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html)
         
         # minor error checking
-        if not soup.find('table', attrs={'class':'data', 'width':'100%'}):
+        if not soup.find('div', attrs={'id':'content'}):
             irc.reply("Something broke in formatting on the NFL Draft order page.")
             return  
-            
-        table = soup.find('table', attrs={'class':'data', 'width':'100%'})
-        rows = table.findAll('tr', attrs={'class':re.compile('^row.*?')})
-
+        
+        # now process html
+        div = soup.find('div', attrs={'id':'content'})
+        h1 = div.find('h1', attrs={'class':'newpagetitle'}).getText() 
+        optround = "Round %s" % (optround) # create "optround" total hack but works.
+        round = div.find('h2', text=optround).findNext('ol') # ol container, found by text.
+        rows = round.findAll('li') # each li has an a w/the team.
+        
         append_list = []
 
-        # list is in order, get and append.
-        for row in rows:
-            team = row.findAll('td')[3]
-            team = str(team.getText().strip().replace('N.Y.','NY')) # short?
-            append_list.append(team)
-
-        irc.reply("Next NFL Draft order: {0}".format(string.join([item for item in append_list], " | ")))
+        # go through each and append to list. This is ugly but it works. 
+        for i,row in enumerate(rows):
+            rowtext = row.find('a')
+            if rowtext:
+                rowtext.extract()
+                rowtext = rowtext.getText().strip().replace('New York','NY') # ugly spaces + wrong NY.
+                rowtext = self._translateTeam('team', 'draft', rowtext) # shorten teams.
+            
+            # now, handle appending differently depending on what's left in row after extract()
+            if len(row.getText().strip()) > 0: # handle if row has more after (for a trade)
+                append_list.append("{0}. {1} {2}".format(i+1,rowtext, row.getText().strip())) # +1 since it starts at 0.
+            else: # most of the time, it'll be empty.
+                append_list.append("{0}. {1}".format(i+1,rowtext))
+                
+        # now output
+        irc.reply("{0} :: {1} :: {2}".format(ircutils.mircColor(h1, 'red'),optround," ".join(append_list)))
         
-    nfldraftorder = wrap(nfldraftorder)
+    nfldraftorder = wrap(nfldraftorder, [getopts({'round': ('int')})])
 
 
     def nflplayoffs(self, irc, msg, args):
