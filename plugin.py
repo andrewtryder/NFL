@@ -1188,8 +1188,62 @@ class NFL(callbacks.Plugin):
     nflroster = wrap(nflroster, [(getopts({'number': ('int')})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
     
     
+    def nflteamdraftpicks(self, irc, msg, args, optteam):
+        """<team>
+        Display total NFL draft picks for a team and what round.
+        """
+        
+        optteam = optteam.upper()
+
+        if optteam not in self._validteams():
+            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+            return
+        
+        url = self._b64decode('aHR0cDovL3d3dy5mZnRvb2xib3guY29tL25mbF9kcmFmdA==') + '/' + str(datetime.datetime.now().year) + '/nfl_draft_order_full.cfm'
+        
+        try:
+            request = urllib2.Request(url)
+            html = (urllib2.urlopen(request)).read()
+        except:
+            irc.reply("Failed to open url: %s" % url)
+            return
+            
+        soup = BeautifulSoup(html)
+        if not soup.find('div', attrs={'id':'content_nosky'}):
+            irc.reply("Something broke on formatting.")
+            return
+            
+        div = soup.find('div', attrs={'id':'content_nosky'})
+        h1 = div.find('h1', attrs={'class':'newpagetitle'}).getText()
+        table = div.find('table', attrs={'class':'fulldraftorder'})
+        rows = table.findAll('tr')[1:] # skip the first row.
+
+        nflteampicks = collections.defaultdict(list)
+
+        for row in rows:
+            tds = row.findAll('td')
+            team = tds[0].getText().strip().replace('WAS','WSH') # again a hack for people using WAS instead of WSH.
+            numofpicks = tds[1].getText().strip()
+            pickrounds = tds[2].getText().strip()
+            appendString = "Total: {0} Picks: {1}".format(numofpicks, pickrounds)
+            nflteampicks[str(team)].append(appendString)
+
+        # get the team
+        output = nflteampicks.get(optteam, None)
+        
+        # finally output
+        if not output:
+            irc.reply("Team not found. Something break?")
+            return
+        else:
+            irc.reply("{0} :: {1} :: {2}".format(ircutils.mircColor(h1, 'red'), ircutils.bold(optteam), "".join(output)))
+
+        
+    nflteamdraftpicks = wrap(nflteamdraftpicks, [('somethingWithoutSpaces')])
+    
+    
     def nfldraftorder(self, irc, msg, args, optlist):
-        """<--round #>
+        """[--round #]
         Display current NFL Draft order for next year's draft.
         Will default to display the first round. Use --round # to display another (1-7)
         """
