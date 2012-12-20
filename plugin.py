@@ -37,6 +37,12 @@ class NFL(callbacks.Plugin):
     This should describe *how* to use this plugin."""
     threaded = True
     
+    def _red(self, string):
+        """
+        Returns a red string.
+        """
+        return ircutils.mircColor(string, 'red')
+    
     def _batch(self, iterable, size):
         """
         http://code.activestate.com/recipes/303279/#c7
@@ -565,10 +571,10 @@ class NFL(callbacks.Plugin):
     
     def nflweeklyleaders(self, irc, msg, args):
         """
-        Display weekly leaders in various categories.
+        Display weekly NFL Leaders in various categories.
         """
     
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC93ZWVrbHkvbGVhZGVycw==')
+        url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL2xlYWRlcnM/d2pi')
 
         try:
             req = urllib2.Request(url)
@@ -576,45 +582,38 @@ class NFL(callbacks.Plugin):
         except:
             irc.reply("Failed to open: %s" % url)
             return
-
+        
+        # parse html
+        html = html.replace('&nbsp;','')
         soup = BeautifulSoup(html)
-        weeklytitle = soup.find('h1', attrs={'class':'h2'}).renderContents().strip()
-        tables = soup.findAll('table', attrs={'class':'tablehead'})
+        tables = soup.findAll('table', attrs={'class':'table'})
+        subheading = soup.find('div', attrs={'class':'sub dark'})
+        subheadingextract = subheading.a.extract() # remove the junk - might be buggy. 
 
-        object_list = []
+        # one small sanity check.
+        if len(tables) < 1:
+            irc.reply("Something broke parsing weekly leaders.")
+            return
 
+        weeklyleaders = collections.defaultdict(list)
+
+        # parse each table, which is a stat category.
         for table in tables:
-            statcategory = table.find('tr', attrs={'class':'stathead'}).find('td')
-            rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
-            for row in rows:
-                player = row.find('td', attrs={'align':'left'})
-                team = player.findNext('td')     
-                d = collections.OrderedDict()
-                d['category'] = statcategory.renderContents().strip()
-                d['player'] = str(player.text.replace('.','. '))
-                d['team'] = team.renderContents().strip()
-                object_list.append(d)
-        
-        passinglist = []
-        rushinglist = []
-        receivinglist = []
-        defensivelist = []
+            rows = table.findAll('tr') # all rows, first one, below, is the heading
+            heading = rows[0].find('td', attrs={'class':'sec row', 'width':'65%'})
+            append_list = [] # container per list
+            for i,row in enumerate(rows[1:]): # rest of the rows, who are leaders.
+                tds = row.findAll('td')
+                rnk = tds[0]
+                player = tds[1]
+                stat = tds[2] # +1 the count so it looks normal, bold player/team and append.
+                append_list.append("{0}. {1} ({2})".format(i+1, ircutils.bold(player.getText()), stat.getText()))
+            # one we have everything in the string, append, so we can move into the next category.
+            weeklyleaders[str(heading.getText())] = append_list
 
-        for each in object_list:
-            if each['category'] == "Passing Leaders":
-                passinglist.append(each['player'] + "(" + each['team'] + ")")
-            if each['category'] == "Rushing Leaders":
-                rushinglist.append(each['player'] + "(" + each['team'] + ")")
-            if each['category'] == "Receiving Leaders":
-                receivinglist.append(each['player'] + "(" + each['team'] + ")")    
-            if each['category'] == "Defensive Leaders":
-                defensivelist.append(each['player'] + "(" + each['team'] + ")")
-        
-        irc.reply(ircutils.mircColor(weeklytitle, 'red'))
-        irc.reply(ircutils.bold("Passing Leaders: ") + string.join([item for item in passinglist], " | "))
-        irc.reply(ircutils.bold("Rushing Leaders: ") + string.join([item for item in rushinglist], " | "))
-        irc.reply(ircutils.bold("Receiving Leaders: ") + string.join([item for item in receivinglist], " | "))
-        irc.reply(ircutils.bold("Defensive Leaders: ") + string.join([item for item in defensivelist], " | "))
+        # output time.
+        for i,x in weeklyleaders.items():
+            irc.reply("{0} {1} :: {2}".format(self._red(i), self._red(subheading.getText())," ".join(x)))
     
     nflweeklyleaders = wrap(nflweeklyleaders)
     
