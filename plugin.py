@@ -632,8 +632,9 @@ class NFL(callbacks.Plugin):
             if option == 'caphit':
                 caphit, average = True, False
 
-        positions = [ 'center','guard','tackle','tight-end','wide-receiver','fullback', 'running-back', 'quarterback',\
-        'defensive-end', 'defensive-tackle', 'linebacker', 'cornerback', 'safety', 'kicker', 'punter', 'kick-returner', 'long-snapper' ]
+        positions = ['center','guard','tackle','tight-end','wide-receiver','fullback',\
+            'running-back', 'quarterback', 'defensive-end', 'defensive-tackle', 'linebacker',\
+             'cornerback', 'safety', 'kicker', 'punter', 'kick-returner', 'long-snapper']
 
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS90b3Atc2FsYXJpZXM=') + '/nfl/' 
         
@@ -651,10 +652,16 @@ class NFL(callbacks.Plugin):
         
         headers = {"Content-type": "application/x-www-form-urlencoded"}
         params = urllib.urlencode({'ajax':'1'})
-        request = urllib2.Request(url, params, headers)
-        html = (urllib2.urlopen(request)).read()
+        
+        try:
+            request = urllib2.Request(url, params, headers)
+            html = (urllib2.urlopen(request)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+        
+        # process html.
         html = html.replace('\n','')
-
         soup = BeautifulSoup(html)
         tbody = soup.find('tbody')
         rows = tbody.findAll('tr')[0:5] # just do top5 because some lists are long.
@@ -682,9 +689,9 @@ class NFL(callbacks.Plugin):
             title += " (average salaries) "
         if optposition:
             title += " at %s" % (optposition)       
-                
-        output = "{0}: {1}".format(title, descstring)
-        irc.reply(output)
+        
+        # now output
+        irc.reply("{0}: {1}".format(title, descstring))
             
     nfltopsalary = wrap(nfltopsalary, [(getopts({'average':'', 'caphit':''})), optional('somethingWithoutSpaces')])
     
