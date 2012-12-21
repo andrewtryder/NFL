@@ -523,7 +523,67 @@ class NFL(callbacks.Plugin):
                      
     nflgamelog = wrap(nflgamelog, [getopts({'year':('somethingWithoutSpaces'),
                                             'games':('somethingWithoutSpaces')}), ('text')])
-    
+
+
+    def nflprobowl(self, irc, msg, args, optyear):
+        """<year>
+        Display NFL Pro Bowlers for a year. Ex: 2011. 
+        """
+        
+        # must test the date.
+        testdate = self._validate(str(optyear), '%Y')
+        if not testdate:
+            irc.reply("Invalid year. Must be YYYY.")
+            return
+        if int(optyear) < 1950:
+            irc.reply("Year must be 1950 or after.")
+            return
+        
+        url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS95ZWFycw==') + '/%s/probowl.htm' % optyear
+        
+        # url time.
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+        
+        # process html    
+        soup = BeautifulSoup(html)
+        h1 = soup.find('h1')
+        if not soup.find('table', attrs={'id':'pro_bowl'}): # one last sanity check
+            irc.reply("Something broke trying to read probowl data page. Did you try and check the current year before the roster is out?")
+            return
+        table = soup.find('table', attrs={'id':'pro_bowl'}).find('tbody')
+        rows = table.findAll('tr', attrs={'class':''})
+        
+        # setup containers
+        teams = {}
+        positions = {}
+        players = []
+
+        # process each player.
+        for row in rows:
+            tds = row.findAll('td')
+            pos = str(tds[0].getText())
+            player = str(tds[1].getText())
+            tm = str(tds[2].getText())
+            teams[tm] = teams.get(tm, 0) + 1 # to count teams
+            positions[pos] = positions.get(pos, 0) + 1 # to count positions
+            players.append("{0}, {1} ({2})".format(ircutils.bold(player), tm, pos)) # append player to list
+
+        # now output.
+        # we display the heading, total teams (len) and use teams, sorted in rev, top10.
+        irc.reply("{0} :: Total Players: {1} - Total Teams: {2} - Top Teams: {3}".format(\
+            self._red(h1.getText()), ircutils.underline(len(players)), ircutils.underline(len(teams)),\
+                [k + ": " + str(v) for (k,v) in sorted(teams.items(),\
+                    key=lambda x: x[1], reverse=True)[0:10]]))
+        
+        irc.reply("{0}".format(" | ".join(players)))
+           
+    nflprobowl = wrap(nflprobowl, [('int')])
+
     
     def nflfines(self, irc, msg, args, optargs):
         """[--num #]
