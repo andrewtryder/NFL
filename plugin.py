@@ -41,13 +41,20 @@ class NFL(callbacks.Plugin):
         """
         Returns a red string.
         """
+
         return ircutils.mircColor(string, 'red')
-    
+
+    def _bold(self, string):
+        """
+        Returns a bold string.
+        """
+        return ircutils.bold(string)
+            
     def _batch(self, iterable, size):
         """
         http://code.activestate.com/recipes/303279/#c7
         """
-        
+
         c = count()
         for k, g in groupby(iterable, lambda x:c.next()//size):
             yield g
@@ -56,7 +63,7 @@ class NFL(callbacks.Plugin):
         """
         Return true or false for valid date based on format.
         """
-        
+
         try:
             datetime.datetime.strptime(date, format) # format = "%m/%d/%Y"
             return True
@@ -67,7 +74,7 @@ class NFL(callbacks.Plugin):
         """
         Unicode normalize for news.
         """
-        
+
         nkfd_form = unicodedata.normalize('NFKD', unicode(data))
         return u"".join([c for c in nkfd_form if not unicodedata.combining(c)])
 
@@ -585,10 +592,20 @@ class NFL(callbacks.Plugin):
     nflprobowl = wrap(nflprobowl, [('int')])
 
     
-    def nflfines(self, irc, msg, args, optargs):
+    def nflfines(self, irc, msg, args, optlist):
         """[--num #]
         Display latest NFL fines. Use --num # to display more than 3. Ex: --num 5
         """
+
+        # handle optlist/optnumber
+        optnumber = '5'
+        if optlist:
+            for (key, value) in optlist:
+                if key == 'num': # between 1 and 10, go to 5 
+                    if value < 1 or value > 10:
+                        optnumber = '5'
+                    else:
+                        optnumber = value
 
         url = self._b64decode('aHR0cDovL3d3dy5qdXN0ZmluZXMuY29t')
 
@@ -619,14 +636,14 @@ class NFL(callbacks.Plugin):
             append_list.append("{0} {1} {2} :: {3}".format(date.getText(),\
                 ircutils.bold(player.getText()), fine.getText(), reason.getText()))   
         
-        for i,each in enumerate(append_list[0:3]):
+        for i,each in enumerate(append_list[0:int(optnumber)]):
             if i is 0: # only for header row.
-                irc.reply("Latest {0} :: Total {1}".format(heading.getText(), totalfines))
+                irc.reply("Latest {0} :: Total {1} Fines.".format(heading.getText(), totalfines))
                 irc.reply(each)
             else:
                 irc.reply(each)
                 
-    nflfines = wrap(nflfines, [getopts({'num':''})])
+    nflfines = wrap(nflfines, [getopts({'num':('int')})])
     
     
     def nflweeklyleaders(self, irc, msg, args):
@@ -1525,16 +1542,16 @@ class NFL(callbacks.Plugin):
             
             tds = row.findAll('td') # now get td in each row for making into the list
             rank = tds[0].getText()
-            team = tds[1].getText().replace('z -', '').replace('y -', '').replace('x -', '') # short.
+            team = tds[1].getText().replace('z -', '').replace('y -', '').replace('x -', '').replace('* -','') # short.
             #self.log.info(str(team))
             #team = self._translateTeam('team', 'short', team)
             reason = tds[10].getText()
-            appendString = "{0}".format(team)
+            appendString = "{0}".format(self._bold(team.strip()))
             nflplayoffs[conf].append(appendString)
 
         for i,x in nflplayoffs.iteritems():
             matchups = "{6} :: BYES: {4} and {5} | WC: {3} @ {0} & {2} @ {1} | In the Hunt: {7} & {8}".format(\
-                x[2], x[3], x[4], x[5], x[0], x[1], ircutils.mircColor(i, 'red'), x[6], x[7])
+                x[2], x[3], x[4], x[5], x[0], x[1], self._red(i), x[6], x[7])
             irc.reply(matchups)
 
     nflplayoffs = wrap(nflplayoffs)
