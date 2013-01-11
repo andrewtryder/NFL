@@ -1705,7 +1705,6 @@ class NFL(callbacks.Plugin):
                     irc.reply("Team not found. Must be one of: %s" % self._validteams())
                     return
             
-        
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wb3dlcnJhbmtpbmdz')
 
         try:
@@ -2527,7 +2526,7 @@ class NFL(callbacks.Plugin):
         """[player]
         Look up NFL career stats for a player. Ex: nflcareerstats tom brady
         """
-        
+                
         optplayer = optplayer.lower().strip()
         
         lookupid = self._playerLookup('eid', optplayer)
@@ -2536,7 +2535,7 @@ class NFL(callbacks.Plugin):
             irc.reply("No player found for: %s" % optplayer)
             return
         
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
         
         try:
             req = urllib2.Request(url)
@@ -2549,22 +2548,66 @@ class NFL(callbacks.Plugin):
             irc.reply("No stats available for: %s" % optplayer)
             return
     
-        soup = BeautifulSoup(html)
-        
+        soup = BeautifulSoup(html,convertEntities=BeautifulSoup.HTML_ENTITIES)
         if not soup.find('a', attrs={'class':'btn-split-btn'}): # check if player is active.
             irc.reply("Cannot find any career stats for an inactive/unsigned player: %s" % optplayer)
             return
+        # experience.
+        exp = soup.find('span', text="Experience")
+        if exp: 
+            exp = exp.findParent('li')
+            exp.span.extract()
+        # position
+        pos = soup.find('ul', attrs={'class':'general-info'}).find('li',attrs={'class':'first'}).getText().upper()
+        pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])
+        # basics.
+        playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
+        article = soup.find('div', attrs={'class':'article'})
+        divs = article.findAll('table', attrs={'class':'tablehead'}) # each one.
+
+        # what to look for with each position
+        postostats = {
+            'QB':['passing','rushing'],
+            'RB':['rushing','receiving'],
+            'FB':['rushing','receiving'],
+            'WR':['receiving','rushing'],
+            'TE':['receiving','rushing'],
+            'DE':['defensive'],
+            'DT':['defensive'],
+            'LB':['defensive'],
+            'CB':['defensive'],
+            'S':['defensive'],
+            'PK':['kicking'],
+            'P':['punting']
+        }
+
+        # prepare dicts for output
+        stats = {} # holds the actual stats
+        statcategories = {} # holds the categories.
+
+        # expanded careerstats. 
+        for f,div in enumerate(divs):
+            if div.find('tr', attrs={'class':'colhead'}):
+                if not div.find('tr', attrs={'class':'total'}, text="There are no stats available."):
+                    stathead = div.find('tr', attrs={'class':'stathead'})
+                    colhead = div.find('tr', attrs={'class':'colhead'}).findAll('td')[1:]     
+                    totals = div.find('tr', attrs={'class':'total'}).findAll('td')[1:]
+                    tmplist = []
+                    for i,total in enumerate(totals):
+                        tmplist.append(ircutils.bold(colhead[i+1].getText())+": "+total.getText())
+                    stats[int(f)] = tmplist
+                    statcategories[str(stathead.getText().replace('Stats','').strip().lower())] = f
         
-        playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
-        div = soup.find('h4', text="STATS").findNext('table', attrs={'class':'tablehead'})
-        header = div.find('tr', attrs={'class':'colhead'}).findAll('th')
-        row = div.find('td', text="Career").findParent('tr')
-        tds = row.findAll('td')
-
-        del header[0],tds[0] # junk parts of career we can delete.
-
-        output = string.join([ircutils.bold(header[i].text) + ": " + td.text for i,td in enumerate(tds)], " | ")        
-        irc.reply(ircutils.mircColor(playername, 'red') + " (career) :: " + output)
+        # now output.
+        output = []
+        if postostats.has_key(pos): # if we want specific stats.
+            for each in postostats[pos]:
+                if statcategories.has_key(each):
+                    output.append("{0}: {1}".format(ircutils.underline(each.title()), " | ".join(stats.get(statcategories[each]))))
+        else:
+            output.append("No stats for the {0} position.".format(pos))
+        
+        irc.reply("{0}({1} exp) career stats :: {2}".format(self._red(playername),exp.getText()," || ".join(output)))
             
     nflcareerstats = wrap(nflcareerstats, [('text')])
     
