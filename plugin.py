@@ -2522,15 +2522,58 @@ class NFL(callbacks.Plugin):
     nflcontract = wrap(nflcontract, [('text')])
     
     
+    def nflpostseasoncareer(self, irc, msg, args, optplayer):
+        """<player>
+        Display a player's post-season career stats. (Ex: nflpostseasoncareer Tom Brady)
+        Use nflcareerstats for regular season stats.
+        """
+        
+        optplayer = optplayer.lower()
+        lookupid = self._playerLookup('sid', optplayer)  
+        if lookupid == "0":
+            irc.reply("No player found for: %s" % optplayer)
+            return
+        
+        url = self._b64decode('aHR0cDovL2hvc3RlZC5zdGF0cy5jb20vZmIvcGxheWVyc3RhdHMuYXNw') + '?id=%s' % lookupid
+        try:
+            req = urllib2.Request(url)
+            html = (urllib2.urlopen(req)).read()
+        except:
+            irc.reply("Failed to open: %s" % url)
+            return
+
+        soup = BeautifulSoup(u,convertEntities=BeautifulSoup.HTML_ENTITIES)
+        if not soup.find('h2', attrs={'class':'shsTableTitle'}, text="Postseason Stats"):
+            irc.reply("I didn't find postseason stats for: %s. It could be a position w/o any stats." % optplayer)
+            return
+
+        # now grab the table and parse for output.
+        playername = soup.find('strong', attrs={'class':'shsPlayerName'})
+        h2 = soup.find('h2', attrs={'class':'shsTableTitle'}, text="Postseason Stats")
+        table = h2.findNext('table', attrs={'class':'shsTable shsBorderTable'})
+        stathead = table.find('tr', attrs={'class':'shsTableTtlRow'})
+        colhead = table.find('tr', attrs={'class':'shsColTtlRow'}).findAll('td')[1:]
+        totals = table.find('tr', attrs={'class':'shsTableSubttlRow'}).findAll('td')[1:]
+
+        # prep for output
+        output = []
+        for i,each in enumerate(totals):
+            output.append(ircutils.bold(colhead[i+1].getText()) + ": " + each.getText())
+
+        irc.reply("{0} {1} :: {2}".format(self._red(playername.getText()),stathead.getText()," | ".join(output)))
+
+    nflpostseasoncareer = wrap(nflpostseasoncareer, [('text')])
+    
+    
     def nflcareerstats(self, irc, msg, args, optplayer):
-        """[player]
+        """<player>
         Look up NFL career stats for a player. Ex: nflcareerstats tom brady
+        For post-season stats, use nflpostseasoncareer. 
         """
                 
-        optplayer = optplayer.lower().strip()
+        optplayer = optplayer.lower()
         
-        lookupid = self._playerLookup('eid', optplayer)
-        
+        lookupid = self._playerLookup('eid', optplayer)  
         if lookupid == "0":
             irc.reply("No player found for: %s" % optplayer)
             return
@@ -2633,10 +2676,12 @@ class NFL(callbacks.Plugin):
         if not season:
             # Season stats do not appear until after the first week of games, which is always going to be first weekend in September
             # So, we account for this using September 9 of each year as the time to use the current year, otherwise, subtract 1 year.
-            if datetime.datetime.now().month < 9 and datetime.datetime.now().day < 9:
+            if datetime.datetime.now().month < 9:
+                season = str(datetime.datetime.now().year - 1)
+            elif datetime.datetime.now().month == "9" and datetime.datetime.now().day < 9:
                 season = str(datetime.datetime.now().year - 1)
             else:
-                season = str(datetime.datetime.now().year)            
+                season = str(datetime.datetime.now().year)       
 
         # now, handle the rest.
         optplayer = optplayer.lower()
