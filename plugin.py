@@ -2656,13 +2656,12 @@ class NFL(callbacks.Plugin):
     
     
     def nflseason(self, irc, msg, args, optlist, optplayer):
-        """<--year DDDD> [player]
+        """[--year DDDD] <player>
         Look up NFL Season stats for a player. Ex: nflseason tom brady.
         To look up a different year, use --year YYYY. Ex: nflseason --year 2010 tom brady
         """
         
         season = False
-        
         if optlist:
             for (key,value) in optlist:
                 if key == 'year': # check our year. validate below.
@@ -2684,10 +2683,7 @@ class NFL(callbacks.Plugin):
                 season = str(datetime.datetime.now().year)       
 
         # now, handle the rest.
-        optplayer = optplayer.lower()
-        
-        lookupid = self._playerLookup('eid', optplayer)
-        
+        lookupid = self._playerLookup('eid', optplayer.lower())        
         if lookupid == "0":
             irc.reply("No player found for: %s" % optplayer)
             return
@@ -2700,9 +2696,7 @@ class NFL(callbacks.Plugin):
         except:
             irc.reply("Failed to open: %s" % url)
             return
-            
-        html = html.replace('tr class="evenrow','tr class="oddrow')
-
+        
         if "No stats available." in html:
             irc.reply("No stats available for: %s" % optplayer)
             return
@@ -2716,21 +2710,21 @@ class NFL(callbacks.Plugin):
         playername = soup.find('a', attrs={'class':'btn-split-btn'}).renderContents().strip()
         table = soup.find('table', attrs={'class':'tablehead'}) # first table.
         headings = table.findAll('tr', attrs={'class':'colhead'})
-        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow')})
+        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow|^evenrow')})
 
         seasonlist = [str(i.find('td').string) for i in rows] # cheap list to find the index for a year.
 
         if season in seasonlist:
             yearindex = seasonlist.index(season)
         else:
-            irc.reply("No season stats found for: %s in %s" % (optplayer, season))
+            irc.reply("No season stats found for: %s in %s" % (playername, season))
             return
             
         heading = headings[0].findAll('td') # first table, first row is the heading.
         row = rows[yearindex].findAll('td') # the year comes with the index number, which we find above.
 
         output = string.join([ircutils.bold(each.text) + ": " + row[i].text for i,each in enumerate(heading)], " | ")
-        irc.reply(ircutils.mircColor(playername, 'red') + " :: " + output)
+        irc.reply("{0} :: {1}".format(ircutils.mircColor(playername, 'red'),output))
 
     nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
     
