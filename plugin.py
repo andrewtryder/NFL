@@ -1316,29 +1316,40 @@ class NFL(callbacks.Plugin):
     nfldepthchart = wrap(nfldepthchart, [('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
     
     
-    def nflroster(self, irc, msg, args, optlist, optteam, optposition):
-        """[team] [position]
-        Display roster for team by position. Ex: NE QB.
+    def nflroster(self, irc, msg, args, optteam, optposition):
+        """<team> <position/#>
+        Display team roster by position group or person matching #.
         Position must be one of: QB, RB, WR, TE, OL, DL, LB, SD, ST
+        Ex: nflroster NE QB (all QBs on NE) or NFL NE 12 (NE roster #12)
         """
 
         optteam = optteam.upper()
-
         if optteam not in self._validteams():
             irc.reply("Team not found. Must be one of: %s" % self._validteams())
             return
             
         lookupteam = self._translateTeam('yahoo', 'team', optteam)
         
-        validpositions = { 'QB':'Quarterbacks', 'RB':'Running Backs', 'ST':'Special Teams' }
+        useNum = True
+        validpositions = {
+                    'QB':'Quarterbacks',
+                    'RB':'Running Backs',
+                    'WR':'Wide Receivers/Tight Ends',
+                    'TE':'Wide Receivers/Tight Ends',
+                    'OL':'Offensive Line',
+                    'DL':'Defensive Line',
+                    'LB':'Linebackers',
+                    'SD':'Secondary',
+                    'ST':'Special Teams' }
         
-        if optposition not in postable:
-            irc.reply("Position must be one of: %s" % validpositions.keys())
-            return
+        optposition = optposition.replace('#','') # remove # infront of # if there.
+        if not optposition.isdigit(): # if we are not a digit, check if we're in valid positions.
+            useNum = False
+            if optposition not in validpositions:
+                irc.reply("Error: When looking up position groups, it must be one of: %s" % validpositions.keys())
+                return
         
         url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/roster' % lookupteam
-        
-        self.log.info(url)
 
         try:        
             req = urllib2.Request(url)
@@ -1347,14 +1358,13 @@ class NFL(callbacks.Plugin):
             irc.reply("Could not fetch: %s" % url)
             return
 
+        # process html
         soup = BeautifulSoup(html)
         tbodys = soup.findAll('tbody')[1:] #skip search header.
 
+        # setup defaultdicts for output.
         nflroster = collections.defaultdict(list)
-        roster_age = []
-        roster_exp = []
-        roster_weight = []
-        roster_height = []
+        positiongroups = collections.defaultdict(list)
 
         for tbody in tbodys:
             rows = tbody.findAll('tr')
@@ -1367,28 +1377,21 @@ class NFL(callbacks.Plugin):
                 weight = height.findNext('td')
                 age = weight.findNext('td')
                 exp = age.findNext('td')
+                group = row.findPrevious('caption')
+                nflroster[str(number.getText())].append("{0} ({1})".format(player.getText(),position.getText()))
+                positiongroups[str(group.getText())].append("#{0} {1}".format(number.getText(),player.getText()))
         
-                if optnumber:
-                    keyString = str(number.getText())
-                    appendString = str(player.getText() + " " + position.getText())    
-                else:
-                    keyString = str(position.getText())
-                    appendString = str(number.getText() + ". " + player.getText())
-                    roster_age.append(int(age.getText()))
-                    roster_exp.append(int(exp.getText().replace('R','0')))
+        if useNum:
+            if nflroster.has_key(str(optposition)):
+                output = "{0} #{1} is: {2}".format(optteam, optposition, "".join(nflroster.get(str(optposition))))
+            else:
+                output = "I did not find a person matching number: {0} on {1}".format(optposition, optteam)
+        else:
+            output = "{0} on {1} :: {2}".format(optposition,optteam," | ".join(positiongroups.get(str(validpositions[optposition]))))
         
-                nflroster[keyString].append(appendString)
-            
-        for i,x in nflroster.iteritems():
-            print i,x
+        irc.reply("{0}".format(output))
         
-        averageAge = ("%.2f" % (sum(roster_age) / float(len(roster_age))))
-        averageExp = ("%.2f" % (sum(roster_exp) / float(len(roster_exp))))
-
-        print averageAge
-        print averageExp
-        
-    nflroster = wrap(nflroster, [(getopts({'number': ('int')})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
+    nflroster = wrap(nflroster, [('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
     
     
     def nflteamdraftpicks(self, irc, msg, args, optteam):
