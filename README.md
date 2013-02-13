@@ -1,16 +1,15 @@
 Supybot-NFL
 ===========
 
-Supybot plugin for NFL things.
+Supybot plugin for NFL/Football things.
 
-NOTE: While I'm open sourcing this plugin, it is mainly intended for my own purposes. After loading
-the plugin and satisifying needs, you will need to create the base database: sqlite3 nfl.db < nfl_schema.sql
-And the players part I have not released. 
+NOTE: While I'm open sourcing this plugin, it is mainly intended for my own purposes.
 
-Obviously, you will need to be running Supybot/Limnoria for this to work, along with the various dependencies
-for the plugin. I can't help you with this part as its beyond the scope of a plug-in. 
+First, I've moved the databases into the db directory. Do not move nor modify these files unless you know what
+you're doing. Many parts of this plugin will break if these are missing, corrupt or unavailable. I will always
+have the raw and db forms available.
 
-If you need assistance/help, I can't guarantee anything, but you may find me on irc. For those who understand
-python and would like to contribute something, please fork and submit a pull request. I'm more than happy to add
-in code. Feature suggestions are also welcomed. Much of the expansion of this plugin is due to creative ideas
-and also folks putting in some work here.
+Second, since this is more of a personal plugin that I know others use, don't consider this as a general use,
+even with the open sourcing. I'm always open for ideas/suggestions, however. Find me on IRC if you have any.
+
+Feb 11, 2013 - entire rewrite. lots of changes.
