@@ -315,8 +315,8 @@ class NFL(callbacks.Plugin):
     ###################
 
     def nflplayeraddalias(self, irc, msg, args, optid, optalias):
-        """<player>
-        Add a player alias.
+        """<eid> <alias>
+        Add a player alias. Ex: 2330 gisele
         """
 
         optalias = optalias.lower()  # sanitize name so it conforms.
@@ -331,14 +331,14 @@ class NFL(callbacks.Plugin):
         except sqlite3.Error, e:
             # ERROR: I cannot insert alias: column name is not unique
             # ERROR: I cannot insert alias: foreign key constraint failed
-            irc.reply("ERROR: I cannot insert alias: {0}".format(e.args[0]))
+            irc.reply("ERROR: I cannot insert alias: {0}".format(e)) #(e.args[0]))
         db.close()
 
     nflplayeraddalias = wrap(nflplayeraddalias, [('checkCapability', 'admin'), ('int'), ('text')])
 
     def nflplayerdelalias(self, irc, msg, args, optalias):
-        """<player>
-        Delete a player alias.
+        """<player alias>
+        Delete a player alias. Ex: gisele
         """
 
         optalias = optalias.lower()
@@ -363,7 +363,10 @@ class NFL(callbacks.Plugin):
         Fetches aliases for player.
         """
 
-        lookupid = self._playerLookup('eid', optplayer)
+        if optplayer.isdigit():
+            pass
+        else:
+            lookupid = self._playerLookup('eid', optplayer)
         if lookupid == "0":
             irc.reply("ERROR: I did not find any NFL player in the DB matching: {0}".format(optplayer))
             return
@@ -2268,7 +2271,8 @@ class NFL(callbacks.Plugin):
             extraPlayerNews = playerNews.find('div', attrs={'style':'font-style:italic;'})
             if extraPlayerNews:  # clean it up.
                 extraPlayerNews.extract()
-                playerNews = ' '.join(self._remove_accents(playerNews.getText()).split())  # for some reason, rotowire has many spaces in its reports.
+                playerNews = self._remove_accents(playerNews.getText())
+                playerNews = utils.str.normalizeWhitespace(playerNews)
             else:
                 playerNews = "No news found for player"
 
@@ -2348,6 +2352,7 @@ class NFL(callbacks.Plugin):
         h1 = soup.find('h1').getText().split('|',1)[0].strip()
         p1 = pn.find('div', attrs={'class': 'report'}).getText()
         contract = re.sub('<[^<]+?>', '', p1).strip()
+        contract = utils.str.normalizeWhitespace(contract)  # kill double spacing.
 
         irc.reply("{0} :: {1}".format(self._red(h1), contract))
 
