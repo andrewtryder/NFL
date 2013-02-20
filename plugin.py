@@ -2246,37 +2246,71 @@ class NFL(callbacks.Plugin):
         """<player>
         Display latest news for NFL player. Ex: Tom Brady
         """
+        useSPN = False  # simple bypass as I found wrold but am not sure how long it will work.
+        if useSPN:  # conditional to use SPN here. We'll use rworld.
+            lookupid = self._playerLookup('eid', optplayer)
+            if lookupid == "0":
+                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
+                irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+                return
 
-        lookupid = self._playerLookup('eid', optplayer)
-        if lookupid == "0":
-            related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-            irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
-            return
+            url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcnVwZGF0ZQ==') + '?playerId=%s&wjb=' % lookupid
+            html = self._httpget(url)
+            if not html:
+                irc.reply("ERROR: Failed to fetch {0}.".format(url))
+                self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+                return
 
-        url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcnVwZGF0ZQ==') + '?playerId=%s&wjb=' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-
-        soup = BeautifulSoup(html)
-        playerName = soup.find('div', attrs={'class':'sub bold'})
-        if not playerName:
-            irc.reply("I could not find any news. Did formatting change?")
-            return
-
-        if soup.find('div', attrs={'class':'ind line'}):
-            playerNews = soup.find('div', attrs={'class':'ind line'})
-            extraPlayerNews = playerNews.find('div', attrs={'style':'font-style:italic;'})
-            if extraPlayerNews:  # clean it up.
-                extraPlayerNews.extract()
-                playerNews = self._remove_accents(playerNews.getText())
-                playerNews = utils.str.normalizeWhitespace(playerNews)
+            soup = BeautifulSoup(html)
+            playerName = soup.find('div', attrs={'class': 'sub bold'})
+            if not playerName:
+                irc.reply("I could not find any news. Did formatting change?")
+                return
             else:
-                playerNews = "No news found for player"
+                playerName = playerName.getText()
 
-        output = "{0} :: {1}".format(self._red(playerName.getText()), playerNews)
+            if soup.find('div', attrs={'class': 'ind line'}):
+                playerNews = soup.find('div', attrs={'class': 'ind line'})
+                extraPlayerNews = playerNews.find('div', attrs={'style': 'font-style:italic;'})
+                if extraPlayerNews:  # clean it up.
+                    extraPlayerNews.extract()
+                    playerNews = self._remove_accents(playerNews.getText())
+                else:
+                    playerNews = "No news found for player."
+        else:
+            lookupid = self._playerLookup('rid', optplayer)
+            if lookupid == "0":
+                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
+                irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+                return
+
+            url = self._b64decode('aHR0cDovL2Rldi5yb3Rvd29ybGQuY29tL3NlcnZpY2VzL21vYmlsZS5hc214L0dldEpTT05TaW5nbGVQbGF5ZXJOZXdzP3Nwb3J0PU5GTA==') + '&playerid=%s' % lookupid
+            html = self._httpget(url)
+            if not html:
+                irc.reply("ERROR: Failed to fetch {0}.".format(url))
+                self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+                return
+
+            jsondata = json.loads(html)
+
+            if len(jsondata) < 1:
+                playerNews = "I did not find any news for player."
+            else:
+                jsondata = jsondata[0]
+                playerName = jsondata['FirstName'] + " " + jsondata['LastName']
+                timestamp = jsondata.get('TimeStamp', None) # RawTimeStamp
+                headline = jsondata.get('Headline', None)
+                impact = jsondata.get('Impact', None)
+                news = jsondata.get('News', None)
+                # now construct playernews
+                playerNews = ""
+                if timestamp: playerNews += "{0}".format(timestamp)
+                if headline: playerNews += " {0}".format(self._remove_accents(headline))
+                if news: playerNews += " {0}".format(self._remove_accents(news))
+                if impact: playerNews += " {0}".format(self._remove_accents(impact))
+
+        # finally, lets output.
+        output = "{0} :: {1}".format(self._red(playerName), utils.str.normalizeWhitespace(playerNews))
         irc.reply(output)
 
     nflplayernews = wrap(nflplayernews, [('text')])
@@ -2300,9 +2334,9 @@ class NFL(callbacks.Plugin):
             return
 
         soup = BeautifulSoup(html)
-        team = soup.find('td', attrs={'class':'teamHeader'}).find('b')
-        playerName = soup.find('div', attrs={'class':'sub bold'})
-        divs = soup.findAll('div', attrs={'class':re.compile('^ind tL$|^ind alt$|^ind$')})
+        team = soup.find('td', attrs={'class': 'teamHeader'}).find('b')
+        playerName = soup.find('div', attrs={'class': 'sub bold'})
+        divs = soup.findAll('div', attrs={'class': re.compile('^ind tL$|^ind alt$|^ind$')})
 
         append_list = []
 
@@ -2312,7 +2346,7 @@ class NFL(callbacks.Plugin):
                 key = bold
                 bold.extract()
                 value = div
-                append_list.append("{0}: {1}".format(key.getText(), value.getText()))
+                append_list.append("{0}: {1}".format(self._ul(key.getText()), value.getText()))
 
         descstring = " | ".join([item for item in append_list])
         output = "{0} :: {1} :: {2}".format(self._red(playerName.getText()),self._bold(team.getText()), descstring)
