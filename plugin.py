@@ -2003,38 +2003,37 @@ class NFL(callbacks.Plugin):
     nfltrades = wrap(nfltrades)
 
     def nflarrests(self, irc, msg, args):
-        """Display the last 5 NFL Arrests."""
+        """Display the last 6 NFL Arrests from NFL Nation."""
 
         url = self._b64decode('aHR0cDovL2FycmVzdG5hdGlvbi5jb20vY2F0ZWdvcnkvcHJvLWZvb3RiYWxsLw==')
-
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        html = html.replace('&nbsp;',' ').replace('&#8217;','’')
+        html = html.replace('&nbsp;', ' ').replace('&#8217;', '’')
 
         soup = BeautifulSoup(html)
-        lastDate = soup.findAll('span', attrs={'class':'time'})[0]
-        divs = soup.findAll('div', attrs={'class':'entry'})
+        lastDate = soup.findAll('span', attrs={'class': 'time'})[0]
+        divs = soup.findAll('div', attrs={'class': 'entry'})
 
         arrestlist = []
 
         for div in divs:
-            title = div.find('h2')
-            datet = div.find('span', attrs={'class':'time'}).getText()
-            #datet = self._dateFmt(str(datet.getText()))
-            arrestedFor = div.find('strong', text=re.compile('Team:'))
-            if arrestedFor:
-                matches = re.search(r'<strong>Team:.*?</strong>(.*?)<br />', arrestedFor.findParent('p').renderContents(), re.I|re.S|re.M)
+            title = div.find('h2').getText().encode('utf-8')
+            datet = div.find('span', attrs={'class': 'time'}).getText().encode('utf-8')
+            datet = self._dtFormat("%m/%d", datet, "%B %d, %Y")  # translate date.
+            arrestedfor = div.find('strong', text=re.compile('Team:'))
+            if arrestedfor:
+                matches = re.search(r'<strong>Team:.*?</strong>(.*?)<br />', arrestedfor.findParent('p').renderContents(), re.I|re.S|re.M)
                 if matches:
-                    college = matches.group(1).replace('(NFL)','').strip()
+                    college = matches.group(1).replace('(NFL)','').encode('utf-8').strip()
                 else:
                     college = "None"
             else:
                 college = "None"
-            arrestlist.append("{0} :: {1} - {2}".format(self._bold(datet), title.getText(), college))
+            arrestlist.append("{0} :: {1} - {2}".format(datet, title, college))
 
         # date math.
         a = datetime.date.today()
