@@ -2026,7 +2026,7 @@ class NFL(callbacks.Plugin):
             datet = self._dtFormat("%m/%d", datet, "%B %d, %Y")  # translate date.
             arrestedfor = div.find('strong', text=re.compile('Team:'))
             if arrestedfor:
-                matches = re.search(r'<strong>Team:.*?</strong>(.*?)<br />', arrestedfor.findParent('p').renderContents(), re.I|re.S|re.M)
+                matches = re.search(r'<strong>Team:.*?</strong>(.*?)<br />', arrestedfor.findParent('p').renderContents(), re.I| re.S| re.M)
                 if matches:
                     college = matches.group(1).replace('(NFL)','').encode('utf-8').strip()
                 else:
@@ -2072,8 +2072,8 @@ class NFL(callbacks.Plugin):
 
         soup = BeautifulSoup(html)
 
-        title = soup.find('div', attrs={'class':'mod-header stathead'}).find('h4')
-        table = soup.find('table', attrs={'class':'tablehead'})
+        title = soup.find('div', attrs={'class': 'mod-header stathead'}).find('h4')
+        table = soup.find('table', attrs={'class': 'tablehead'})
         rows = table.findAll('tr', attrs={'class': re.compile('^(odd|even)row.*')})[0:10]
 
         qbrlist = []
@@ -2108,12 +2108,12 @@ class NFL(callbacks.Plugin):
             return
 
         soup = BeautifulSoup(html)
-        if not soup.find('div', attrs={'id':'my-players-table'}):
+        if not soup.find('div', attrs={'id': 'my-players-table'}):
             irc.reply("Something broke parsing the formatting on {0}. Contact bot owner.".format(url))
             return
-        div = soup.find('div', attrs={'id':'my-players-table'})
-        table = div.find('table', attrs={'class':'tablehead'})
-        rows = table.findAll('tr', attrs={'class':re.compile('(odd|even)row')})
+        div = soup.find('div', attrs={'id': 'my-players-table'})
+        table = div.find('table', attrs={'class': 'tablehead'})
+        rows = table.findAll('tr', attrs={'class': re.compile('(odd|even)row')})
 
         coachlist = collections.defaultdict(list)
 
