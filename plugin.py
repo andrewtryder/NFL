@@ -1237,6 +1237,26 @@ class NFL(callbacks.Plugin):
 
     nflstandings = wrap(nflstandings, [getopts({'detailed':''}), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
 
+    def _format_cap(self, figure):
+        """Format cap numbers for nflcap command."""
+
+        figure = figure.replace(',', '').strip()  # remove commas.
+        if figure.startswith('-'):  # figure out if we're a negative number.
+            negative = True
+            figure = figure.replace('-')
+        else:
+            negative = False
+
+        try:  # try and millify.
+            figure = self._millify(float(figure))
+        except:
+            figure = figure
+
+        if negative:
+            figure = "-" + figure
+        # now return
+        return figure
+
     def nflcap(self, irc, msg, args, optteam):
         """<team>
         Display team's NFL cap situation. Ex: GB
@@ -1250,7 +1270,7 @@ class NFL(callbacks.Plugin):
         lookupteam = self._translateTeam('spotrac', 'team', optteam)
 
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwv') + '%s/cap-hit/' % lookupteam
-        html = self._httpget(url) #, h={"Content-type": "application/x-www-form-urlencoded"}, d={'ajax':'1'})
+        html = self._httpget(url)  #, h={"Content-type": "application/x-www-form-urlencoded"}, d={'ajax':'1'})
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
@@ -1259,26 +1279,25 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html)
         teamtitle = soup.find('title')
         tbody = soup.find('tbody')
-        rows = tbody.findAll('tr')
-        capfigure = rows[-1].find('span', attrs={'class':'cap total'})
-        capnum = capfigure['title'].split(':')[1].replace(',','').strip()
-        capwroll = capfigure.getText().replace(',','')
-        capfigure = "{0} (w/o rollover: {1})".format(\
-            self._bold(self._millify(float(capwroll))), self._bold(self._millify(float(capnum))))
-        rows = rows[-5:-1]
 
-        append_list = []
+        capfigures = []
 
-        for row in rows:
-            title = row.find('td', attrs={'colspan':'2'}).getText()
-            figure = row.find('td', attrs={'class':'total figure'}).getText().replace(',', '')
-            if figure.isdigit():
-                append_list.append(self._ul(title) + ": " + self._millify(float(figure)))
-            else:
-                append_list.append(self._ul(title) + ": " + figure)
+        captds = tbody.findAll('td', attrs={'class':'total team total-title'})
+        for captd in captds:
+            row = captd.findPrevious('tr')
+            captitle = row.find('td', attrs={'class': 'total team total-title'})
+            capfigure = row.find('td', attrs={'class': 'total figure'})
+            capfigure = self._format_cap(capfigure.getText())
+            capfigures.append("{0}: {1}".format(self._ul(captitle.getText()), capfigure))
 
-        descstring = " | ".join([item for item in append_list])
-        output = "{0} :: {1} :: {2}".format(self._red(teamtitle.getText()), capfigure, descstring)
+        bottomrow = tbody.findAll('tr')[-1]  # last row
+        bottomtds = bottomrow.findAll('td')
+        basesalary, signingbonus, otherbonus, totalcap = bottomtds[1].getText(), bottomtds[2].getText(), bottomtds[3].getText(), bottomtds[5].getText()
+
+        descstring = " | ".join([item for item in capfigures])
+        output = "{0} :: Base Salaries {1}  Signing Bonuses {2}  Other Bonus {3} :: {4} :: TOTAL CAP {5}".format(\
+            self._red(teamtitle.getText()), self._format_cap(basesalary), self._format_cap(signingbonus),\
+                self._format_cap(otherbonus), descstring, self._bold(self._format_cap(totalcap)))
         irc.reply(output)
 
     nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
