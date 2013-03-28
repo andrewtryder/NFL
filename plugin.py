@@ -1243,7 +1243,7 @@ class NFL(callbacks.Plugin):
         figure = figure.replace(',', '').strip()  # remove commas.
         if figure.startswith('-'):  # figure out if we're a negative number.
             negative = True
-            figure = figure.replace('-')
+            figure = figure.replace('-','')
         else:
             negative = False
 
