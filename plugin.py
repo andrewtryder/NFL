@@ -1290,14 +1290,15 @@ class NFL(callbacks.Plugin):
             capfigure = self._format_cap(capfigure.getText())
             capfigures.append("{0}: {1}".format(self._ul(captitle.getText()), capfigure))
 
-        bottomrow = tbody.findAll('tr')[-1]  # last row
-        bottomtds = bottomrow.findAll('td')
+        bottomrow = tbody.findAll('tr')
+        bottomtds = bottomrow[-2].findAll('td')
         basesalary, signingbonus, otherbonus, totalcap = bottomtds[1].getText(), bottomtds[2].getText(), bottomtds[3].getText(), bottomtds[5].getText()
+        capspace = bottomrow[-1].findAll('td')[-1].getText()  # last row, last td.
 
         descstring = " | ".join([item for item in capfigures])
-        output = "{0} :: Base Salaries {1}  Signing Bonuses {2}  Other Bonus {3} :: {4} :: TOTAL CAP {5}".format(\
+        output = "{0} :: Base Salaries {1}  Signing Bonuses {2}  Other Bonus {3} :: {4} :: TOTAL CAP {5} :: SPACE {6}".format(\
             self._red(teamtitle.getText()), self._format_cap(basesalary), self._format_cap(signingbonus),\
-                self._format_cap(otherbonus), descstring, self._bold(self._format_cap(totalcap)))
+                self._format_cap(otherbonus), descstring, self._format_cap(totalcap), self._bold(self._format_cap(capspace)))
         irc.reply(output)
 
     nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
