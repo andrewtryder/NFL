@@ -103,6 +103,7 @@ class NFL(callbacks.Plugin):
 
     def _dtFormat(self, outfmt, instring, infmt):
         """Convert from one dateformat to another."""
+
         try:
             d = datetime.datetime.strptime(instring, infmt)
             output = d.strftime(outfmt)
