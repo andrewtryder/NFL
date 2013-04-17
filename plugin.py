@@ -1958,19 +1958,22 @@ class NFL(callbacks.Plugin):
         object_list = []
 
         for row in rows:
-            pickNumber = row.find('p', attrs={'class':'round-number'})
+            pickNumber = row.find('p', attrs={'class':'round-number'}).getText()
             pickName = row.find('p', attrs={'class':'player-name'})
-            pickPos = row.find('li', attrs={'class':'li-position'})
-            pickTeam = row.find('p', attrs={'class':'team-name'})
-            appendString = "{0}. {1} - {2}".format(self._bold(pickNumber.getText()), pickName.getText(), pickTeam.getText())
+            pickTeam = row.find('p', attrs={'class':'team-name'}).getText()
+            if pickName:
+                appendString = "{0}. {1} - {2}".format(self._bold(pickNumber), pickName.getText(), pickTeam)
+            else:  # we won't have a pick leading up to the draft.
+                appendString = "{0}. {1}".format(self._bold(pickNumber), pickTeam)
 
             if row.find('p', attrs={'class':'notes'}):
                 appendString += " ({0})".format(row.find('p', attrs={'class':'notes'}).getText())
 
             object_list.append(appendString)
 
-        irc.reply("{0}: ".format(self._red(h2.getText().strip()) + ": "))
-
+        # output header
+        irc.reply("{0}: ".format(self._red(h2.getText().strip())))
+        # output each round.
         for N in self._batch(object_list, 6):
             irc.reply(' | '.join(str(n) for n in N))
 
