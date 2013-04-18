@@ -1914,6 +1914,17 @@ class NFL(callbacks.Plugin):
 
     nflschedule = wrap(nflschedule, [(getopts({'full':''})), ('somethingWithoutSpaces')])
 
+    def nflcountdown(self, irc, msg, args):
+        """
+        Display the time until the next NFL season starts.
+        """
+
+        dDelta = datetime.datetime(2013, 9, 05, 21, 30) - datetime.datetime.now()
+        irc.reply("There are {0} days {1} hours {2} minutes {3} seconds until the start of the 2013 NFL Season.".format(\
+                                            dDelta.days, dDelta.seconds/60/60, dDelta.seconds/60%60, dDelta.seconds%60))
+
+    nflcountdown = wrap(nflcountdown)
+
     def nfldraft(self, irc, msg, args, optyear, optround):
         """[YYYY] [round #]
         Show the NFL draft round from year. Year must be 1996 or after and optional round must be between 1 and 7.
