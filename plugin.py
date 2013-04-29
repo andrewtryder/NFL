@@ -1992,7 +1992,7 @@ class NFL(callbacks.Plugin):
 
     def nfltrades(self, irc, msg, args):
         """
-        Display the last NFL 10 trades.
+        Display the last NFL 5 trades.
         """
 
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwtdHJhZGUtdHJhY2tlci8=')
@@ -2001,38 +2001,33 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html
         soup = BeautifulSoup(html)
-        title = soup.find('title')
         table = soup.find('table', attrs={'border':'0'})
         tbodys = table.findAll('tbody')
-
-        object_list = []
-
+        # list for output
+        nfltrade_list = []
+        # each tbody for days. lump it all together.
         for tbody in tbodys:
             rows = tbody.findAll('tr')
             for row in rows:
-                player = row.find('td', attrs={'class':'player'}).find('a')
-                data = row.find('span', attrs={'class':'data'})
-                date = row.findPrevious('th', attrs={'class':'tracker-date'})
-                fromteam = row.findAll('td', attrs={'class':'playerend'})[0].find('img')['src'].replace('http://www.spotrac.com/assets/images/thumb/','').replace('.png','')
-                toteam = row.findAll('td', attrs={'class':'playerend'})[1].find('img')['src'].replace('http://www.spotrac.com/assets/images/thumb/','').replace('.png','')
-                #print player, data, date, fromteam, toteam
-                d = collections.OrderedDict()
-                d['player'] = player.renderContents().strip()
-                d['date'] = date.renderContents().strip()
-                d['data'] = data.renderContents().strip()
-                d['fromteam'] = self._translateTeam('team','st',fromteam)
-                d['toteam'] = self._translateTeam('team','st',toteam)
-                object_list.append(d)
+                player = row.find('td', attrs={'class':'player'}).find('a').getText()
+                data = row.find('span', attrs={'class':'data'}).getText()
+                date = row.findPrevious('th', attrs={'class':'tracker-date'}).getText()
+                fromteam = row.findAll('td', attrs={'class':'playerend'})[0].find('img')['src'].split('/', 7)
+                toteam = row.findAll('td', attrs={'class':'playerend'})[1].find('img')['src'].split('/', 7)
+                # translate into TEAMS.
+                fromteam = self._translateTeam('team','st', fromteam[6].replace('.png', ''))  # have to use silly
+                toteam = self._translateTeam('team','st', toteam[6].replace('.png', ''))  # .png method with both.
+                # create string. apppend.
+                appendString = "{0} :: {1}{2}{3} :: {4} {5}".format(date, self._bold(fromteam), self._red('->'), self._bold(toteam), player, data)
+                nfltrade_list.append(appendString)
 
-        if len(object_list) < 1:
-            irc.reply("My apologies but I do not see any trades. Sometimes the page displaying trades breaks.")
-            return
-
-        for each in object_list[0:10]:
-            output = "{0} - {1} - {2}->{3} :: {4}".format(ircutils.bold(each['date']), ircutils.mircColor(each['player'],'red'), each['fromteam'],each['toteam'],each['data'])
-            irc.reply(output)
+        # output time.
+        irc.reply("Last 5 NFL Trades")
+        # now output the first 5.
+        for each in nfltrade_list[0:5]:
+            irc.reply(each)
 
     nfltrades = wrap(nfltrades)
 
