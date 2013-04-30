@@ -97,6 +97,7 @@ class NFL(callbacks.Plugin):
 
     def _batch(self, iterable, size):
         """http://code.activestate.com/recipes/303279/#c7"""
+
         c = count()
         for k, g in groupby(iterable, lambda x:c.next()//size):
             yield g
@@ -188,6 +189,7 @@ class NFL(callbacks.Plugin):
 
     def _sanitizeName(self, name):
         """ Sanitize name. """
+
         name = name.lower()
         name = name.replace('.','')
         name = name.replace('-','')
@@ -301,6 +303,7 @@ class NFL(callbacks.Plugin):
 
     def _eidlookup(self, eid):
         """Returns a playername for a specific EID."""
+
         conn = sqlite3.connect(self._playersdb)
         cursor = conn.cursor()
         cursor.execute("SELECT fullname FROM players WHERE eid=?", (eid,))
@@ -603,6 +606,62 @@ class NFL(callbacks.Plugin):
             irc.reply("{0} Practice Report ({1}) :: {2}".format(self._red(optteam), timeStamp, " | ".join(output)))
 
     nflpracticereport = wrap(nflpracticereport, [('somethingWithoutSpaces')])
+
+    def nflteamdraft(self, irc, msg, args, optteam, optyear):
+        """<team> <year>
+        Display a team's draft picks from a specific year.
+        Ex: NE 2010
+        """
+
+        optteam = optteam.upper()
+        if optteam not in self._validteams():
+            irc.reply("ERROR: Team not found. Must be one of: %s" % self._validteams())
+            return
+        # check team above. check year here.
+        testdate = self._validate(str(optyear), '%Y')
+        if not testdate:
+            irc.reply("ERROR: Invalid year. Must be YYYY.")
+            return
+        if int(optyear) < 1965 or int(optyear) > datetime.datetime.now().year:
+            irc.reply("ERROR: Year must be between 1965 and the current year.")
+            return
+        # build URL.
+        url = self._b64decode('aHR0cDovL3d3dy5kcmFmdGhpc3RvcnkuY29tL2luZGV4LnBocC95ZWFycy8=') + '%s' % optyear
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # process html.
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'border':'1'})  # this is amb.
+        firstrow = table.find('tr')  # our simple error check.
+        h1 = firstrow.find('h1')  # if draft is not available, like 2013 but in March, this will be None.
+        if not h1:
+            irc.reply("ERROR: Draft for %s is unavailable. Perhaps it has not occured yet?") % optyear
+            return
+        # if we do have h1, picks are from 3 and on due to header rows.
+        rows = table.findAll('tr')[3:]
+        # defaultdict(list) to put all picks in. key is the team. value = list of picks.
+        teamdict = collections.defaultdict(list)
+        # each row is a pick.
+        for row in rows:
+            tds = row.findAll('td')
+            pick_no = tds[2].getText()
+            pick_name = tds[3].getText()
+            pick_team = tds[4].getText().lower()  # lower for translateTeam
+            pick_pos = tds[5].getText()
+            pick_col = tds[6].getText()
+            # translate the team here.
+            pick_team = self._translateTeam('team', 'dh', pick_team)
+            appendString = "{0}. {1} ({2} {3})".format(pick_no, pick_name, pick_pos, pick_col)
+            teamdict.setdefault(str(pick_team), []).append(appendString)
+
+        # output time.
+        output = teamdict.get(str(optteam))  # optteam = key
+        irc.reply("{0} draft picks in {1} :: {2}".format(self._red(optteam), self._bold(optyear), " | ".join(output)))
+
+    nflteamdraft = wrap(nflteamdraft, [('somethingWithoutSpaces'), ('int')])
 
     def nflweather(self, irc, msg, args, optteam):
         """<team>
