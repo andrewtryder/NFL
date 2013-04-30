@@ -10,7 +10,7 @@ import urllib2
 import re
 import collections
 import string
-from itertools import groupby, izip, count
+from itertools import groupby, count
 import datetime
 import json
 import sqlite3
