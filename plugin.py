@@ -555,6 +555,8 @@ class NFL(callbacks.Plugin):
 
             sb_data[roman.getText()].append(str(addString))
 
+        self.log.info(str(sb_data))
+
         output = sb_data.get(optbowl, None)
 
         if output is None:
@@ -663,8 +665,8 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: I did not find any picks for {0} in {1}. Perhaps something broke?".format(optteam, optyear))
             return
         else:
-            irc.reply("{0} draft picks in {1}({2}):: {3}".format(\
-                self._red(optteam), self._bold(optyear), len(output), " | ".join(output)))
+            irc.reply("{0} draft picks in {1}({2}):: {3}".format(self._red(optteam),\
+                    self._bold(optyear), len(output), " | ".join(output)))
 
     nflteamdraft = wrap(nflteamdraft, [('somethingWithoutSpaces'), ('int')])
 
