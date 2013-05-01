@@ -538,31 +538,30 @@ class NFL(callbacks.Plugin):
         sb_data = collections.defaultdict(list)
 
         for row in rows:
-            year = row.find('td')
-            roman = year.findNext('td')
-            t1 = roman.findNext('td')
-            t1score = t1.findNext('td')
-            t2 = t1score.findNext('td')
-            t2score = t2.findNext('td')
-            mvp = t2score.findNext('td')
-            loc = mvp.findNext('td')
-            city = loc.findNext('td')
-            state = city.findNext('td')
+            tds = row.findAll('td')
+            year = tds[0].getText()
+            roman = tds[1].getText()
+            roman = re.sub('[^A-Z_]+', '', roman, re.UNICODE)  # clean up roman here.
+            t1 = tds[2].getText()
+            t1score = tds[3].getText()
+            t2 = tds[4].getText()
+            t2score = tds[5].getText()
+            mvp = tds[6].getText()
+            loc = tds[7].getText()
+            city = tds[8].getText()
+            state = tds[9].getText()
+            # value part is the appendString.
+            appendString = "{0} Super Bowl {1} :: {2} {3} - {4} {5}  MVP: {6}  Location: {7} ({8}, {9})".format(\
+                self._bold(year), self._red(roman), t1, t1score, t2, t2score, mvp, loc, city, state)
+            # append now.
+            sb_data[str(roman)] = appendString
 
-            addString = year.getText() + " Super Bowl: " + roman.getText() + " :: " +  t1.getText() + " " + t1score.getText() + " " + t2.getText()\
-                + " " + t2score.getText() + "  MVP: " + mvp.getText() + " " + " Location: " + loc.getText() + " (" + city.getText() + ", "\
-                + state.getText() + ")"
-
-            sb_data[roman.getText()].append(str(addString))
-
-        self.log.info(str(sb_data))
-
-        output = sb_data.get(optbowl, None)
-
+        # output time.
+        output = sb_data.get(str(optbowl), None)
         if output is None:
-            irc.reply("No Super Bowl found for: %s" % optbowl)
+            irc.reply("ERROR: No Super Bowl found for: %s (Check formatting)" % optbowl)
         else:
-            irc.reply(" ".join(output))
+            irc.reply(output)
 
     nflsuperbowl = wrap(nflsuperbowl, [('somethingWithoutSpaces')])
 
