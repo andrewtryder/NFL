@@ -1409,6 +1409,7 @@ class NFL(callbacks.Plugin):
     def nfldepthchart(self, irc, msg, args, optteam, opttype):
         """<team> <offense|defense|special>
         Display team's depth chart for unit.
+        Ex: NYJ offense
         """
 
         optteam = optteam.upper()
