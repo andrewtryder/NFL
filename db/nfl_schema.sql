@@ -1,4 +1,22 @@
-CREATE TABLE nfl (team TEXT PRIMARY KEY, eid INTEGER, roto TEXT, full TEXT, draft TEXT, yahoo TEXT, short TEXT,conf TEXT, div TEXT, st TEXT, spotrac TEXT, nid INTEGER, pfrshort TEXT, pfrurl TEXT, dh TEXT);
+/* NFL TEAMS */
+CREATE TABLE nfl (
+    team TEXT PRIMARY KEY,
+    eid INTEGER,
+    roto TEXT,
+    full TEXT,
+    draft TEXT,
+    yahoo TEXT,
+    short TEXT,
+    conf TEXT,
+    div TEXT,
+    st TEXT,
+    spotrac TEXT,
+    nid INTEGER,
+    pfrshort TEXT,
+    pfrurl TEXT,
+    dh TEXT
+);
+/* NFL TEAMS. ONE ENTRY PER TEAM.*/
 INSERT INTO nfl (team,eid,full,roto,yahoo,draft,short,conf,div,st,spotrac,nid,pfrshort,pfrurl,dh) values ('ARI','22','Arizona Cardinals','arz','ari','Arizona','Cardinals','nfc','west','arizona1','arizona-cardinals','3800','ari','crd','cardinals');
 INSERT INTO nfl (team,eid,full,roto,yahoo,draft,short,conf,div,st,spotrac,nid,pfrshort,pfrurl,dh) values ('ATL','1','Atlanta Falcons','atl','atl','Atlanta','Falcons','nfc','south','atlanta','atlanta-falcons','0200','atl','atl','falcons');
 INSERT INTO nfl (team,eid,full,roto,yahoo,draft,short,conf,div,st,spotrac,nid,pfrshort,pfrurl,dh) values ('BAL','33','Baltimore Ravens','bal','bal','Baltimore','Ravens','afc','north','baltimore','baltimore-ravens','0325','bal','rav','ravens');
@@ -32,18 +50,73 @@ INSERT INTO nfl (team,eid,full,roto,yahoo,draft,short,conf,div,st,spotrac,nid,pf
 INSERT INTO nfl (team,eid,full,roto,yahoo,draft,short,conf,div,st,spotrac,nid,pfrshort,pfrurl,dh) values ('TEN','10','Tennessee Titans','ten','ten','Tennessee','Titans','afc','south','tennessee','tennessee-titans','2100','ten','oti','titans');
 INSERT INTO nfl (team,eid,full,roto,yahoo,draft,short,conf,div,st,spotrac,nid,pfrshort,pfrurl,dh) values ('WSH','28','Washington Redskins','was','was','Washington','Redskins','nfc','east','washington','washington-redskins','5110','was','was','redskins');
 
-/* CREATE TABLE positions (pos TEXT PRIMARY KEY UNIQUE, fullposition TEXT, team TEXT);
-INSERT INTO positions (pos, fullposition, team) VALUES ('T','Tackle'
-INSERT INTO positions (pos, fullposition, team) VALUES ('G','Guard'
-INSERT INTO positions (pos, fullposition, team) VALUES ('WR','Wide Receiver','
-INSERT INTO positions (pos, fullposition, team) VALUES ('TE','Tight End','
-INSERT INTO positions (pos, fullposition, team) VALUES ('LT','Left Tackle','
-INSERT INTO positions (pos, fullposition, team) VALUES ('LG','Left Guard','
-INSERT INTO positions (pos, fullposition, team) VALUES ('C','Center','
-INSERT INTO positions (pos, fullposition, team) VALUES ('RG','Right Guard','
-INSERT INTO positions (pos, fullposition, team) VALUES ('RT','Right Tackle','
-INSERT INTO positions (pos, fullposition, team) VALUES ('WR','Wide Receiver','
-INSERT INTO positions (pos, fullposition, team) VALUES ('QB','Quarterback','
-INSERT INTO positions (pos, fullposition, team) VALUES ('FB','Fullback','
-INSERT INTO positions (pos, fullposition, team) VALUES ('RB','Running Back','
-*/
+/* NFL TEAM ALIASES */
+CREATE TABLE nflteamaliases (
+    team TEXT,
+    teamalias TEXT,
+    FOREIGN KEY(team) REFERENCES nfl(team)
+);
+/* EACH ALIAS IS INDIVIDUAL LINE. SOME TEAMS WILL HAVE MORE THAN OTHERS. */
+INSERT INTO nflteamaliases (team, teamalias) values ('ARI','arz');
+INSERT INTO nflteamaliases (team, teamalias) values ('ARI','arizona');
+INSERT INTO nflteamaliases (team, teamalias) values ('ARI','cardinals');
+INSERT INTO nflteamaliases (team, teamalias) values ('ATL','atlanta');
+INSERT INTO nflteamaliases (team, teamalias) values ('ATL','falcons');
+INSERT INTO nflteamaliases (team, teamalias) values ('BAL','baltimore');
+INSERT INTO nflteamaliases (team, teamalias) values ('BAL','ravens');
+INSERT INTO nflteamaliases (team, teamalias) values ('BUF','buffalo');
+INSERT INTO nflteamaliases (team, teamalias) values ('BUF','bills');
+INSERT INTO nflteamaliases (team, teamalias) values ('CAR','carolina');
+INSERT INTO nflteamaliases (team, teamalias) values ('CAR','panthers');
+INSERT INTO nflteamaliases (team, teamalias) values ('CHI','chicago');
+INSERT INTO nflteamaliases (team, teamalias) values ('CHI','bears');
+INSERT INTO nflteamaliases (team, teamalias) values ('CIN','cincinatti');
+INSERT INTO nflteamaliases (team, teamalias) values ('CIN','bengals');
+INSERT INTO nflteamaliases (team, teamalias) values ('CLE','cleveland');
+INSERT INTO nflteamaliases (team, teamalias) values ('CLE','browns');
+INSERT INTO nflteamaliases (team, teamalias) values ('DAL','dallas');
+INSERT INTO nflteamaliases (team, teamalias) values ('DAL','cowboys');
+INSERT INTO nflteamaliases (team, teamalias) values ('DAL','cowgirls');
+INSERT INTO nflteamaliases (team, teamalias) values ('DEN','denver');
+INSERT INTO nflteamaliases (team, teamalias) values ('DEN','broncos');
+INSERT INTO nflteamaliases (team, teamalias) values ('DET','detroit');
+INSERT INTO nflteamaliases (team, teamalias) values ('DET','lions');
+INSERT INTO nflteamaliases (team, teamalias) values ('GB','greenbay');
+INSERT INTO nflteamaliases (team, teamalias) values ('GB','packers');
+INSERT INTO nflteamaliases (team, teamalias) values ('GB','gbp');
+INSERT INTO nflteamaliases (team, teamalias) values ('HOU','houston');
+INSERT INTO nflteamaliases (team, teamalias) values ('HOU','texans');
+INSERT INTO nflteamaliases (team, teamalias) values ('IND','colts');
+INSERT INTO nflteamaliases (team, teamalias) values ('JAC','jags');
+INSERT INTO nflteamaliases (team, teamalias) values ('JAC','jaguars');
+INSERT INTO nflteamaliases (team, teamalias) values ('KC','chiefs');
+INSERT INTO nflteamaliases (team, teamalias) values ('MIA','miami');
+INSERT INTO nflteamaliases (team, teamalias) values ('MIA','dolphins');
+INSERT INTO nflteamaliases (team, teamalias) values ('MIN','vikings');
+INSERT INTO nflteamaliases (team, teamalias) values ('NE','nep');
+INSERT INTO nflteamaliases (team, teamalias) values ('NE','patriots');
+INSERT INTO nflteamaliases (team, teamalias) values ('NE','pats');
+INSERT INTO nflteamaliases (team, teamalias) values ('NO','saints');
+INSERT INTO nflteamaliases (team, teamalias) values ('NYG','giants');
+INSERT INTO nflteamaliases (team, teamalias) values ('NYG','gmen');
+INSERT INTO nflteamaliases (team, teamalias) values ('NYJ','jets');
+INSERT INTO nflteamaliases (team, teamalias) values ('NYJ','jest');
+INSERT INTO nflteamaliases (team, teamalias) values ('OAK','oakland');
+INSERT INTO nflteamaliases (team, teamalias) values ('OAK','raiders');
+INSERT INTO nflteamaliases (team, teamalias) values ('PHI','eagles');
+INSERT INTO nflteamaliases (team, teamalias) values ('PHI','eaglols');
+INSERT INTO nflteamaliases (team, teamalias) values ('PIT','steelers');
+INSERT INTO nflteamaliases (team, teamalias) values ('PIT','stoolers');
+INSERT INTO nflteamaliases (team, teamalias) values ('SD','sdc');
+INSERT INTO nflteamaliases (team, teamalias) values ('SD','bolts');
+INSERT INTO nflteamaliases (team, teamalias) values ('SD','chargers');
+INSERT INTO nflteamaliases (team, teamalias) values ('SF','49ers');
+INSERT INTO nflteamaliases (team, teamalias) values ('SEA','seattle');
+INSERT INTO nflteamaliases (team, teamalias) values ('SEA','seahawks');
+INSERT INTO nflteamaliases (team, teamalias) values ('STL','rams');
+INSERT INTO nflteamaliases (team, teamalias) values ('TB','buccaneers');
+INSERT INTO nflteamaliases (team, teamalias) values ('TB','bucs');
+INSERT INTO nflteamaliases (team, teamalias) values ('TEN','titans');
+INSERT INTO nflteamaliases (team, teamalias) values ('WSH','was');
+INSERT INTO nflteamaliases (team, teamalias) values ('WSH','redskins');
+INSERT INTO nflteamaliases (team, teamalias) values ('WSH','skins');
