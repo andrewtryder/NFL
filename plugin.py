@@ -272,43 +272,65 @@ class NFL(callbacks.Plugin):
         db.close()
         return optid
 
-    def _validteams(self, conf=None, div=None):
-        """Returns a list of valid teams for input verification."""
+    def _allteams(self, conf=None, div=None):
+        """Return a list of all valid teams (abbr)."""
 
-        conn = sqlite3.connect(self._nfldb)
-        cursor = conn.cursor()
+        with sqlite3.connect(self._nfldb) as conn:
+            cursor = conn.cursor()
+            if conf and not div:
+                cursor.execute("SELECT team FROM nfl WHERE conf=?", (conf,))
+            elif conf and div:
+                cursor.execute("SELECT team FROM nfl WHERE conf=? AND div=?", (conf, div,))
+            else:
+                cursor.execute("SELECT team FROM nfl")
+        # join all into list.
+        teamlist = [item[0] for item in cursor.fetchall()]
+        # return.
+        return " | ".join(sorted(teamlist))
 
-        if conf and not div:
-            cursor.execute("select team from nfl where conf=?", (conf,))
-        elif conf and div:
-            query = "select team from nfl where conf='%s' AND div='%s'" % (conf,div)
-            cursor.execute(query)
-        else:
-            cursor.execute("select team from nfl")
+    def _validteams(self, optteam):
+        """Takes optteam as input function and sees if it is a valid team.
+        Aliases are supported via nflteamaliases table.
+        Returns a 1 upon error (no team name nor alias found.)
+        Returns the team's 3-letter (ex: NE or ARI) if successful."""
 
-        teamlist = [str(item[0]) for item in cursor.fetchall()]
-        cursor.close()
-        return teamlist
+        with sqlite3.connect(self._nfldb) as conn:
+            cursor = conn.cursor()
+            query = "SELECT team FROM nflteamaliases WHERE teamalias LIKE ?"  # check aliases first.
+            cursor.execute(query, ('%'+self._sanitizeName(optteam)+'%',))
+            aliasrow = cursor.fetchone()
+            if not aliasrow:  # no alias found so we're gonna check team
+                query = "SELECT team FROM nfl WHERE team=?"
+                cursor.execute(query, (optteam.upper(),)) # standard lookup. go upper. nyy->NYY.
+                teamrow = cursor.fetchone()
+                if not teamrow:  # team is not found. Error.
+                    returnval = 1  # checked in each command.
+                else: # ex: NYJ
+                    returnval = str(teamrow[0])
+            else:  # alias turns into team like patriots->NE.
+                returnval = str(aliasrow[0])
+        # return time.
+        return returnval
 
     def _translateTeam(self, db, column, optteam):
-        """Translates input team into specific team for application."""
+        """Translates optteam (validated via _validteams) into proper string using database column."""
 
-        conn = sqlite3.connect(self._nfldb)
-        cursor = conn.cursor()
-        query = "select %s from nfl where %s='%s'" % (db, column, optteam)
-        cursor.execute(query)
-        row = cursor.fetchone()
-        cursor.close()
+        with sqlite3.connect(self._nfldb) as conn:
+            cursor = conn.cursor()
+            query = "SELECT %s FROM nfl WHERE %s='%s'" % (db, column, optteam)
+            cursor.execute(query)
+            row = cursor.fetchone()
+        # return time.
         return (str(row[0]))
 
     def _eidlookup(self, eid):
         """Returns a playername for a specific EID."""
 
-        conn = sqlite3.connect(self._playersdb)
-        cursor = conn.cursor()
-        cursor.execute("SELECT fullname FROM players WHERE eid=?", (eid,))
-        row = cursor.fetchone()
-        cursor.close()
+        with sqlite3.connect(self._playersdb) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT fullname FROM players WHERE eid=?", (eid,))
+            row = cursor.fetchone()
+        # return time.
         if row:
             return (str(row[0]))
         else:
@@ -436,7 +458,7 @@ class NFL(callbacks.Plugin):
         if optyear:
             testdate = self._validate(optyear, '%Y')
             if not testdate or int(optyear) < 1963:  # superbowl era and on.
-                irc.reply("ERROR: Invalid year. Must be YYYY and after 1966.")
+                irc.reply("ERROR: Invalid year. Must be YYYY and after 1963.")
                 return
 
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS9ob2Yv')
@@ -513,53 +535,43 @@ class NFL(callbacks.Plugin):
     nflawards = wrap(nflawards, [('somethingWithoutSpaces')])
 
     def nflsuperbowl(self, irc, msg, args, optbowl):
-        """<number>
-        Display information from a specific Super Bowl. Ex: 39 or XXXIX
+        """<number|roman numeral|year>
+        Display information from a specific Super Bowl.
+        Ex: 39 or XXXIX or 2004.
         """
 
-        if optbowl.isdigit():
-            try:
-                optbowl = self._int_to_roman(int(optbowl))
-            except:
-                irc.reply("Failed to convert %s to a roman numeral" % optbowl)
-                return
+        if optbowl.isdigit():  # if fed digits, check if it's between 1966 and cur year..
+            if not 1966 <= int(optbowl) <= datetime.datetime.now().year: # < 1966 is really what we need here.
+                optbowl = self._int_to_roman(int(optbowl))  # convert to roman.
 
+        # fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS9zdXBlci1ib3dsLw==')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'id':'superbowls'})
-        rows = table.findAll('tr')[1:]
-
+        rows = table.findAll('tr')[1:]  # first row is the header.
+        # key/value dict we use for output.
         sb_data = collections.defaultdict(list)
-
+        # one row per superbowl.
         for row in rows:
-            tds = row.findAll('td')
-            year = tds[0].getText()
-            roman = tds[1].getText()
-            roman = re.sub('[^A-Z_]+', '', roman, re.UNICODE)  # clean up roman here.
-            t1 = tds[2].getText()
-            t1score = tds[3].getText()
-            t2 = tds[4].getText()
-            t2score = tds[5].getText()
-            mvp = tds[6].getText()
-            loc = tds[7].getText()
-            city = tds[8].getText()
-            state = tds[9].getText()
+            tds = [item.getText() for item in row.findAll('td')]
+            year = tds[0]  # year that we use as a key and part of the value.
+            roman = re.sub('[^A-Z_]+', '', tds[1], re.UNICODE)  # clean up roman here.
             # value part is the appendString.
-            appendString = "{0} Super Bowl {1} :: {2} {3} - {4} {5}  MVP: {6}  Location: {7} ({8}, {9})".format(\
-                self._bold(year), self._red(roman), t1, t1score, t2, t2score, mvp, loc, city, state)
-            # append now.
-            sb_data[str(roman)] = appendString
-
+            appendString = "{0} Super Bowl {1} :: {2} {3} - {4} {5} :: MVP: {6} :: Location: {7} ({8}, {9})".format(\
+                self._bold(year), self._red(roman), tds[2], tds[3], tds[4], tds[5], tds[6], tds[7], tds[8], tds[9])
+            # append now. we double append because it's quick and cheap.
+            sb_data[roman] = appendString
+            sb_data[year] = appendString
         # output time.
-        output = sb_data.get(str(optbowl), None)
+        output = sb_data.get(optbowl.upper(), None)
         if output is None:
-            irc.reply("ERROR: No Super Bowl found for: %s (Check formatting)" % optbowl)
+            irc.reply("ERROR: No Super Bowl found for: {0} (Check formatting)".format(optbowl))
         else:
             irc.reply(output)
 
@@ -567,25 +579,31 @@ class NFL(callbacks.Plugin):
 
     def nflpracticereport (self, irc, msg, args, optteam):
         """<team>
-        Display most recent practice report for team. Ex: NE.
+        Display most recent practice report for team.
+        Ex: NE.
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # process and fetch url.
         url = self._b64decode('aHR0cDovL2hvc3RlZC5zdGF0cy5jb20vZmIvcHJhY3RpY2UuYXNw')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # work with html.
         soup = BeautifulSoup(html)
+        # first, check if we have any practice reports. Offseason?
+        if soup.find('div', attrs={'class':'warning'}, text="No practice report found."):
+            irc.reply("ERROR: No practice reports found. Is it the offseason?")
+            return
         timeStamp = soup.find('div', attrs={'id':'shsTimestamp'}).getText()
         tds = soup.findAll('td', attrs={'class':'shsRow0Col shsNamD', 'nowrap':'nowrap'})
-
+        # defaultdict to put each report, one per team.
         practicereport = collections.defaultdict(list)
 
         for td in tds:
@@ -598,10 +616,9 @@ class NFL(callbacks.Plugin):
                 appendString += "({0})".format(report.getText())
 
             practicereport[team].append(appendString)
-
+        # output time.
         output = practicereport.get(optteam, None)
-
-        if output is None:
+        if output is None:  # some teams don't have practice reports.
             irc.reply("No recent practice reports for: {0} as of {1}".format(self._red(optteam), timeStamp.replace('Last updated ','')))
         else:
             irc.reply("{0} Practice Report ({1}) :: {2}".format(self._red(optteam), timeStamp, " | ".join(output)))
@@ -614,16 +631,17 @@ class NFL(callbacks.Plugin):
         Ex: NE 2010
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("ERROR: Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-        # check team above. check year here.
+        # check to make sure year is valid and between 1965 and now.
         testdate = self._validate(str(optyear), '%Y')
         if not testdate:
             irc.reply("ERROR: Invalid year. Must be YYYY.")
             return
-        if int(optyear) < 1965 or int(optyear) > datetime.datetime.now().year:
+        if 1965 > int(optyear) > datetime.datetime.now().year:
             irc.reply("ERROR: Year must be between 1965 and the current year.")
             return
         # build URL.
@@ -637,9 +655,9 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'border':'1'})  # this is amb.
         firstrow = table.find('tr')  # our simple error check.
-        h1 = firstrow.find('h1')  # if draft is not available, like 2013 but in March, this will be None.
-        if not h1:
-            irc.reply("ERROR: Draft for %s is unavailable. Perhaps it has not occured yet?") % optyear
+        h1 = firstrow.find('h1')
+        if not h1:  # if draft is not available, like 2013 but in March, this will be None.
+            irc.reply("ERROR: Draft for {0} is unavailable. Perhaps it has not occured yet?".format(optyear))
             return
         # if we do have h1, picks are from 3 and on due to header rows.
         rows = table.findAll('tr')[3:]
@@ -647,19 +665,15 @@ class NFL(callbacks.Plugin):
         teamdict = collections.defaultdict(list)
         # each row is a pick.
         for row in rows:
-            tds = row.findAll('td')
-            pick_no = tds[2].getText()
-            pick_name = tds[3].getText()
-            pick_team = tds[4].getText().lower()  # lower for translateTeam
-            pick_pos = tds[5].getText()
-            pick_col = tds[6].getText()
+            tds = [item.getText() for item in row.findAll('td')]
             # translate the team here.
-            pick_team = self._translateTeam('team', 'dh', pick_team)
-            appendString = "{0}. {1} ({2} {3})".format(pick_no, pick_name, pick_pos, pick_col)
-            teamdict.setdefault(str(pick_team), []).append(appendString)
-
+            pick_team = self._translateTeam('team', 'dh', tds[4].lower())
+            # prep appendString.
+            appendString = "{0}. {1} ({2} {3})".format(tds[2], tds[3], tds[5], tds[6])
+            # add each pick key: team value: string
+            teamdict.setdefault(pick_team, []).append(appendString)
         # output time.
-        output = teamdict.get(str(optteam))  # optteam = key
+        output = teamdict.get(optteam)  # optteam = key
         if not output:
             irc.reply("ERROR: I did not find any picks for {0} in {1}. Perhaps something broke?".format(optteam, optyear))
             return
@@ -671,14 +685,16 @@ class NFL(callbacks.Plugin):
 
     def nflweather(self, irc, msg, args, optteam):
         """<team>
-        Display weather for the next game. Ex: NE
+        Display weather for the next game.
+        Ex: NE
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5uZmx3ZWF0aGVyLmNvbS8=')
         html = self._httpget(url)
         if not html:
@@ -689,7 +705,7 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'class':'main'})
         if not table:
-            irc.reply("Something broke in formatting with nflweather.")
+            irc.reply("ERROR: Something broke in formatting with nflweather. Is it the offseason?")
             return
 
         tbody = table.find('tbody')
@@ -704,14 +720,13 @@ class NFL(callbacks.Plugin):
             timeOrScore = tds[5].getText()
             gameTemp = tds[8].getText()
 
-            appendString = "{0}@{1} - {2} - {3}".format(awayTeam, ircutils.bold(homeTeam), timeOrScore, gameTemp)
+            appendString = "{0}@{1} - {2} - {3}".format(awayTeam, self._bold(homeTeam), timeOrScore, gameTemp)
             weatherList[awayTeam].append(appendString)
             weatherList[homeTeam].append(appendString)
-
+        # output time.
         output = weatherList.get(optteam, None)
-
-        if output is None:
-            irc.reply("No weather found for: %s. Team on bye?" % optteam)
+        if not output:
+            irc.reply("ERROR: No weather found for: {0}. Team on bye?".format(optteam))
         else:
             irc.reply(" ".join(output))
 
@@ -756,39 +771,37 @@ class NFL(callbacks.Plugin):
 
     def nflprobowl(self, irc, msg, args, optyear):
         """<year>
-        Display NFL Pro Bowlers for a year. Ex: 2011.
+        Display NFL Pro Bowlers for a year.
+        Ex: 2011.
         """
 
         # must test the date.
         testdate = self._validate(str(optyear), '%Y')
         if not testdate:
-            irc.reply("Invalid year. Must be YYYY.")
+            irc.reply("ERROR: Invalid year. Must be YYYY.")
             return
-        if int(optyear) < 1950:
-            irc.reply("Year must be 1950 or after.")
+        if not 1950 <= optyear <= datetime.datetime.now().year:
+            irc.reply("ERROR: Year must be 1950 or after until the current year.")
             return
-
+        # url.
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS95ZWFycw==') + '/%s/probowl.htm' % optyear
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
         # process html
         soup = BeautifulSoup(html)
         h1 = soup.find('h1')
         if not soup.find('table', attrs={'id':'pro_bowl'}):  # one last sanity check
-            irc.reply("Something broke trying to read probowl data page. Did you try and check the current year before the roster is out?")
+            irc.reply("ERROR: Something broke trying to read probowl data page. Did you try and check the current year before the roster is out?")
             return
         table = soup.find('table', attrs={'id':'pro_bowl'}).find('tbody')
         rows = table.findAll('tr', attrs={'class':''})
-
         # setup containers
         teams = {}
         positions = {}
         players = []
-
         # process each player.
         for row in rows:
             tds = row.findAll('td')
@@ -798,19 +811,18 @@ class NFL(callbacks.Plugin):
             teams[tm] = teams.get(tm, 0) + 1 # to count teams
             positions[pos] = positions.get(pos, 0) + 1 # to count positions
             players.append("{0}, {1} ({2})".format(self._bold(player), tm, pos)) # append player to list
-
         # we display the heading, total teams (len) and use teams, sorted in rev, top10.
         irc.reply("{0} :: Total Players: {1} - Total Teams: {2} - Top Teams: {3}".format(\
             self._red(h1.getText()), self._ul(len(players)), self._ul(len(teams)),\
                 [k + ": " + str(v) for (k,v) in sorted(teams.items(), key=lambda x: x[1], reverse=True)[0:10]]))
-
         irc.reply("{0}".format(" | ".join(players)))
 
     nflprobowl = wrap(nflprobowl, [('int')])
 
     def nflfines(self, irc, msg, args, optlist):
         """[--num #]
-        Display latest NFL fines. Use --num # to display more than 3. Ex: --num 5
+        Display latest NFL fines. Use --num # to display more than 3.
+        Ex: --num 5
         """
 
         # handle optlist/optnumber
@@ -818,18 +830,17 @@ class NFL(callbacks.Plugin):
         if optlist:
             for (key, value) in optlist:
                 if key == 'num':  # between 1 and 10, go to 5
-                    if value < 1 or value > 10:
+                    if 1 <= value <= 10:
                         optnumber = '5'
                     else:
                         optnumber = value
-
+        # fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5qdXN0ZmluZXMuY29t')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
         # process html. little error checking.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
         heading = soup.find('div', attrs={'class':'title1'})
@@ -840,14 +851,9 @@ class NFL(callbacks.Plugin):
         append_list = []
 
         for row in rows[0:int(optnumber)]:
-            tds = row.findAll('td')
-            date = tds[0]
+            tds = [item.getText() for item in row.findAll('td')]
             # team = tds[2] # team is broken due to html comments
-            player = tds[3]
-            fine = tds[4]
-            reason = tds[5]
-            append_list.append("{0} {1} {2} :: {3}".format(date.getText(),\
-                ircutils.bold(player.getText()), fine.getText(), reason.getText()))
+            append_list.append("{0} {1} {2} :: {3}".format(tds[0], self._bold(tds[3]), tds[4], tds[5]))
 
         for i,each in enumerate(append_list[0:int(optnumber)]):
             if i is 0:  # only for header row.
@@ -886,7 +892,7 @@ class NFL(callbacks.Plugin):
                 #rnk = tds[0]
                 player = tds[1]
                 stat = tds[2]  # +1 the count so it looks normal, bold player/team and append.
-                append_list.append("{0}. {1} ({2})".format(i+1, ircutils.bold(player.getText()), stat.getText()))
+                append_list.append("{0}. {1} ({2})".format(i+1, self._bold(player.getText()), stat.getText()))
             # one we have everything in the string, append, so we can move into the next category.
             weeklyleaders[str(heading.getText())] = append_list
 
@@ -911,9 +917,10 @@ class NFL(callbacks.Plugin):
             if option == 'caphit':
                 caphit, average = True, False
 
-        positions = ['center','guard','tackle','tight-end','wide-receiver','fullback',\
-            'running-back', 'quarterback', 'defensive-end', 'defensive-tackle', 'linebacker',\
-             'cornerback', 'safety', 'kicker', 'punter', 'kick-returner', 'long-snapper']
+        positions = [   'center','guard','tackle','tight-end','wide-receiver','fullback',
+                        'running-back', 'quarterback', 'defensive-end', 'defensive-tackle', 'linebacker',
+                        'cornerback', 'safety', 'kicker', 'punter', 'kick-returner', 'long-snapper'
+                    ]
 
         # construct url.
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS90b3Atc2FsYXJpZXM=') + '/nfl/'
@@ -923,17 +930,16 @@ class NFL(callbacks.Plugin):
             url += 'cap-hit/'
         if optposition:
             if optposition not in positions:
-                irc.reply("Position not found. Must be one of: %s" % positions)
+                irc.reply("ERROR: Position not found. Must be one of: %s" % positions)
                 return
             else:
                 url += '%s/' % optposition
-
+        # construct and fetch url.
         html = self._httpget(url, h={"Content-type": "application/x-www-form-urlencoded"}, d=utils.web.urlencode({'ajax':'1'}))
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
         # process html.
         soup = BeautifulSoup(html.replace('\n',''))
         tbody = soup.find('tbody')
@@ -946,10 +952,11 @@ class NFL(callbacks.Plugin):
             #team = rank.findNext('td', attrs={'class':re.compile('logo.*?')}).find('img')['src'].replace('http://www.spotrac.com/assets/images/thumb/','').replace('.png','')
             # self._translateTeam('st', 'team', str(team))
             player = row.find('td', attrs={'class':re.compile('player .*?')}).find('a')
-            position = player.findNext('span', attrs={'class':'position'})
+            # position = player.findNext('span', attrs={'class':'position'})
             salary = row.find('span', attrs={'class':'playersalary'}).getText().replace('$','').replace(',','')
             append_list.append("{0}. {1} {2}".format(rank.getText().strip(), self._bold(player.getText().strip()), self._millify(float(salary))))
 
+        # make title
         title = self._red('NFL Top Salaries')
         # add to title, depending on what's going on
         if caphit:
@@ -958,7 +965,6 @@ class NFL(callbacks.Plugin):
             title += " (average salaries)"
         if optposition:
             title += " at %s" % (optposition)
-
         # now output
         irc.reply("{0}: {1}".format(title, " | ".join([item for item in append_list])))
 
@@ -1130,11 +1136,12 @@ class NFL(callbacks.Plugin):
         Display team rankings for off/def versus the rest of the NFL. Ex: NE
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC90ZWFtL18vbmFtZQ==') + '/%s/' % optteam
         html = self._httpget(url)
         if not html:
@@ -1325,16 +1332,18 @@ class NFL(callbacks.Plugin):
 
     def nflcap(self, irc, msg, args, optteam):
         """<team>
-        Display team's NFL cap situation. Ex: GB
+        Display team's NFL cap situation.
+        Ex: GB
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # need the specific spotrac for the url.
         lookupteam = self._translateTeam('spotrac', 'team', optteam)
-
+        # fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwv') + '%s/cap-hit/' % lookupteam
         html = self._httpget(url)  #, h={"Content-type": "application/x-www-form-urlencoded"}, d={'ajax':'1'})
         if not html:
@@ -1371,14 +1380,16 @@ class NFL(callbacks.Plugin):
 
     def nflcoachingstaff(self, irc, msg, args, optteam):
         """<team>
-        Display a NFL team's coaching staff. Ex: NE
+        Display a NFL team's coaching staff.
+        Ex: NE
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL2VuLndpa2lwZWRpYS5vcmcvd2lraS9MaXN0X29mX2N1cnJlbnRfTmF0aW9uYWxfRm9vdGJhbGxfTGVhZ3VlX3N0YWZmcw==')
         html = self._httpget(url)
         if not html:
@@ -1412,18 +1423,19 @@ class NFL(callbacks.Plugin):
         Ex: NYJ offense
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # translate the url based on team.
         lookupteam = self._translateTeam('yahoo', 'team', optteam)
 
         opttype = opttype.lower()
         if opttype not in ('offense', 'defense', 'special'):
             irc.reply("ERROR: Type must be offense, defense or special.")
             return
-
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/depthchart?nfl-pos=%s' % (lookupteam, opttype)
         html = self._httpget(url)
         if not html:
@@ -1464,9 +1476,10 @@ class NFL(callbacks.Plugin):
         Ex: nflroster NE QB (all QBs on NE) or NFL NE 12 (NE roster #12)
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
         lookupteam = self._translateTeam('yahoo', 'team', optteam)
@@ -1487,7 +1500,7 @@ class NFL(callbacks.Plugin):
         if not optposition.isdigit(): # if we are not a digit, check if we're in valid positions.
             useNum = False
             if optposition not in validpositions:
-                irc.reply("Error: When looking up position groups, it must be one of: %s" % validpositions.keys())
+                irc.reply("ERROR: When looking up position groups, it must be one of: %s" % validpositions.keys())
                 return
 
         url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/roster' % lookupteam
@@ -1512,9 +1525,9 @@ class NFL(callbacks.Plugin):
                 # playertype = row.findPrevious('h5')
                 player = number.findNext('th', attrs={'class':'title'}).findNext('a')
                 position = number.findNext('td')
-                height = position.findNext('td')
-                weight = height.findNext('td')
-                age = weight.findNext('td')
+                # height = position.findNext('td')
+                # weight = height.findNext('td')
+                # age = weight.findNext('td')
                 # exp = age.findNext('td')
                 group = row.findPrevious('caption')
                 nflroster[str(number.getText())].append("{0} ({1})".format(player.getText(), position.getText()))
@@ -1535,12 +1548,13 @@ class NFL(callbacks.Plugin):
     def nflteamdraftpicks(self, irc, msg, args, optteam):
         """<team>
         Display total NFL draft picks for a team and what round.
+        Ex: NE
         """
 
-        optteam = optteam.upper()
-
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
         url = self._b64decode('aHR0cDovL3d3dy5mZnRvb2xib3guY29tL25mbF9kcmFmdA==') + '/' + str(datetime.datetime.now().year) + '/nfl_draft_order_full.cfm'
@@ -1552,7 +1566,7 @@ class NFL(callbacks.Plugin):
 
         soup = BeautifulSoup(html)
         if not soup.find('div', attrs={'id':'content_nosky'}):
-            irc.reply("Something broke on formatting.")
+            irc.reply("ERROR: Something broke on formatting.")
             return
 
         div = soup.find('div', attrs={'id':'content_nosky'})
@@ -1570,12 +1584,10 @@ class NFL(callbacks.Plugin):
             appendString = "({0}) Picks: {1}".format(numofpicks, pickrounds)
             nflteampicks[str(team)].append(appendString)
 
-        # get the team
+        # output time.
         output = nflteampicks.get(optteam, None)
-
-        # finally output
         if not output:
-            irc.reply("Team not found. Something break?")
+            irc.reply("ERROR: Team not found. Something break?")
             return
         else:
             irc.reply("{0} :: {1} :: {2}".format(self._red(h1), self._bold(optteam), "".join(output)))
@@ -1592,9 +1604,9 @@ class NFL(callbacks.Plugin):
 
         # handle getopts.
         if optlist:
-            for key, value in optlist:
+            for (key, value) in optlist:
                 if key == 'round':
-                    if value > 7 or value < 1:
+                    if 1 < value < 7:
                         irc.reply("ERROR: Round must be between 1-7")
                         return
                     else:
@@ -1609,7 +1621,7 @@ class NFL(callbacks.Plugin):
 
         soup = BeautifulSoup(html)
         if not soup.find('div', attrs={'id':'content'}):
-            irc.reply("Something broke in formatting on the NFL Draft order page.")
+            irc.reply("ERROR: Something broke in formatting on the NFL Draft order page.")
             return
 
         # now process html
@@ -1667,15 +1679,15 @@ class NFL(callbacks.Plugin):
             conf = str(conf.getText().replace('National Football Conference','NFC').replace('American Football Conference','AFC'))
 
             tds = row.findAll('td')  # now get td in each row for making into the list
-            rank = tds[0].getText()
+            #rank = tds[0].getText()
             team = tds[1].getText().replace('z -', '').replace('y -', '').replace('x -', '').replace('* -','') # short.
             #self.log.info(str(team))
             #team = self._translateTeam('team', 'short', team)
-            reason = tds[10].getText()
+            #reason = tds[10].getText()
             appendString = "{0}".format(self._bold(team.strip()))
             nflplayoffs[conf].append(appendString)
 
-        for i,x in nflplayoffs.iteritems():
+        for i, x in nflplayoffs.iteritems():
             matchups = "{6} :: BYES: {4} and {5} | WC: {3} @ {0} & {2} @ {1} | In the Hunt: {7} & {8}".format(\
                 x[2], x[3], x[4], x[5], x[0], x[1], self._red(i), x[6], x[7])
             irc.reply(matchups)
@@ -1685,12 +1697,14 @@ class NFL(callbacks.Plugin):
 
     def nflteamtrans(self, irc, msg, args, optteam):
         """<team>
-        Shows recent NFL transactions for team. Ex: CHI
+        Shows recent NFL transactions for team.
+        Ex: CHI
         """
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
         lookupteam = self._translateTeam('eid', 'team', optteam)
@@ -1706,7 +1720,7 @@ class NFL(callbacks.Plugin):
         t1 = soup.findAll('div', attrs={'class':re.compile('(^ind tL$|^ind alt$|^ind$)')})
 
         if len(t1) < 1:
-            irc.reply("No transactions found for %s" % optteam)
+            irc.reply("No transactions found for: {0}".format(optteam))
             return
 
         for item in t1:
@@ -1718,19 +1732,21 @@ class NFL(callbacks.Plugin):
 
     def nflinjury(self, irc, msg, args, optlist, optteam):
         """[--details] <TEAM>
-        Show all injuries for team. Example: NYG or NE.
+        Show all injuries for team.
         Use --details to display full table with team injuries.
+        Ex: NE or --details NYG
         """
 
+        # handle optlist input.
         details = False
         for (option, arg) in optlist:
             if option == 'details':
                 details = True
 
-        optteam = optteam.upper()
-
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
         lookupteam = self._translateTeam('roto', 'team', optteam)
@@ -1772,7 +1788,7 @@ class NFL(callbacks.Plugin):
             irc.reply("{0:25} {1:3} {2:15} {3:<7} {4:<15} {5:<10}".format("Name","POS","Status","Date","Injury","Returns"))
 
             for inj in object_list:
-                output = "{0:27} {1:<3} {2:<15} {3:<7} {4:<15} {5:<10}".format(ircutils.bold( \
+                output = "{0:27} {1:<3} {2:<15} {3:<7} {4:<15} {5:<10}".format(self._bold( \
                     inj['name']),inj['position'],inj['status'],inj['date'],inj['injury'],inj['returns'])
                 irc.reply(output)
         else:
@@ -1804,7 +1820,7 @@ class NFL(callbacks.Plugin):
             rank = tds[0].getText()
             team = tds[1].getText()
             value = tds[2].getText().replace(',','')  # value needs some mixing and to a float.
-            append_list.append("{0}. {1} ({2})".format(rank, ircutils.bold(team), self._millify(float(value)*(1000000))))
+            append_list.append("{0}. {1} ({2})".format(rank, self._bold(team), self._millify(float(value)*(1000000))))
 
         header = self._red("Current NFL Team Values")
         irc.reply("{0} :: {1}".format(header, " | ".join(append_list)))
@@ -1818,9 +1834,10 @@ class NFL(callbacks.Plugin):
         """
 
         if optteam:  # if we have a team, check if its valid.
-            optteam = optteam.upper()
-            if optteam not in self._validteams():
-                irc.reply("Team not found. Must be one of: %s" % self._validteams())
+            # test for valid teams.
+            optteam = self._validteams(optteam)
+            if optteam is 1: # team is not found in aliases or validteams.
+                irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
                 return
 
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wb3dlcnJhbmtpbmdz')
@@ -1829,14 +1846,8 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
         # process HTML
         soup = BeautifulSoup(html)
-        if not soup.find('table', attrs={'class':'tablehead'}):
-            irc.reply("Something broke heavily formatting on powerrankings page.")
-            return
-
-        # go about regular html business.
         datehead = soup.find('div', attrs={'class':'date floatleft'})
         table = soup.find('table', attrs={'class':'tablehead'})
         headline = table.find('tr', attrs={'class':'stathead'})
@@ -1883,7 +1894,8 @@ class NFL(callbacks.Plugin):
 
     def nflschedule(self, irc, msg, args, optlist, optteam):
         """<team>
-        Display the last and next five upcoming games for team. Ex: NE
+        Display the last and next five upcoming games for team.
+        Ex: NE
         """
 
         fullSchedule = False
@@ -1891,9 +1903,10 @@ class NFL(callbacks.Plugin):
             if option == 'full':
                 fullSchedule = True
 
-        optteam = optteam.upper()
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
         lookupteam = self._translateTeam('yahoo', 'team', optteam) # don't need a check for 0 here because we validate prior.
@@ -1994,20 +2007,21 @@ class NFL(callbacks.Plugin):
     def nfldraft(self, irc, msg, args, optyear, optround):
         """[YYYY] [round #]
         Show the NFL draft round from year. Year must be 1996 or after and optional round must be between 1 and 7.
-        Defaults to round 1 if round is not given. Ex: nfldraft 2000 6 (Would show the 6th round of the 2000 draft)
+        Defaults to round 1 if round is not given.
+        Ex: nfldraft 2000 6 (Would show the 6th round of the 2000 draft)
         """
 
         if optyear:
             testdate = self._validate(optyear, '%Y')
             if not testdate:
-                irc.reply("Invalid year. Must be YYYY.")
+                irc.reply("ERROR: Invalid year. Must be YYYY.")
                 return
-            if optyear < 1996:
-                irc.reply("Year must be after 1996.")
+            if not 1967 >= optyear >= datetime.datetime.now().year:
+                irc.reply("ERROR: Year must be after 1967.")
                 return
         if optround:
-            if 1 <= optround <= 7:
-                irc.reply("Draft round must be 1 or 7.")
+            if not 1 < optround < 7:
+                irc.reply("ERROR: Draft round must be between 1 and 7.")
                 return
 
         # construct url. add parameters depending on opts above.
@@ -2016,19 +2030,15 @@ class NFL(callbacks.Plugin):
             url += '?year=%s' % (optyear)
         if optround:  # optional round.
             url += '&round=%s' % (optround)
-
+        # build and fetch url.
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'class':'tablehead draft-tracker'})
-        if not table:
-            irc.reply("error: could not find any draft information. Bad year or round?")
-            return
-
         h2 = soup.find('h2')
         rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
 
@@ -2054,7 +2064,7 @@ class NFL(callbacks.Plugin):
         for N in self._batch(object_list, 6):
             irc.reply(' | '.join(str(n) for n in N))
 
-    nfldraft = wrap(nfldraft, [optional('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
+    nfldraft = wrap(nfldraft, [optional('int'), optional('int')])
 
     def nfltrades(self, irc, msg, args):
         """
@@ -2098,7 +2108,9 @@ class NFL(callbacks.Plugin):
     nfltrades = wrap(nfltrades)
 
     def nflarrests(self, irc, msg, args):
-        """Display the last 6 NFL Arrests from NFL Nation."""
+        """
+        Display the last 6 NFL Arrests from NFL Nation.
+        """
 
         url = self._b64decode('aHR0cDovL2FycmVzdG5hdGlvbi5jb20vY2F0ZWdvcnkvcHJvLWZvb3RiYWxsLw==')
         html = self._httpget(url)
@@ -2107,9 +2119,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        html = html.replace('&nbsp;', ' ').replace('&#8217;', '’')
-
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
         lastDate = soup.findAll('span', attrs={'class': 'time'})[0]
         divs = soup.findAll('div', attrs={'class': 'entry'})
 
@@ -2146,7 +2156,8 @@ class NFL(callbacks.Plugin):
 
     def nfltotalqbr(self, irc, msg, args, optlist):
         """[--postseason]
-        Display the top10 NFL QBs, ranked by Total QBR. Use --postseason to display for postseason.
+        Display the top10 NFL QBs, ranked by Total QBR.
+        Use --postseason to display for postseason.
         """
 
         postseason = False
@@ -2166,7 +2177,6 @@ class NFL(callbacks.Plugin):
             return
 
         soup = BeautifulSoup(html)
-
         title = soup.find('div', attrs={'class': 'mod-header stathead'}).find('h4')
         table = soup.find('table', attrs={'class': 'tablehead'})
         rows = table.findAll('tr', attrs={'class': re.compile('^(odd|even)row.*')})[0:10]
@@ -2186,13 +2196,14 @@ class NFL(callbacks.Plugin):
 
     def nflcoach(self, irc, msg, args, optteam):
         """<team>
-        Display the coach for team. Ex: NYJ
+        Display the coach for team.
+        Ex: NYJ
         """
 
-        optteam = optteam.upper()
-
-        if optteam not in self._validteams():
-            irc.reply("Team not found. Must be one of: %s" % self._validteams())
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9jb2FjaGVz')
@@ -2203,9 +2214,6 @@ class NFL(callbacks.Plugin):
             return
 
         soup = BeautifulSoup(html)
-        if not soup.find('div', attrs={'id': 'my-players-table'}):
-            irc.reply("Something broke parsing the formatting on {0}. Contact bot owner.".format(url))
-            return
         div = soup.find('div', attrs={'id': 'my-players-table'})
         table = div.find('table', attrs={'class': 'tablehead'})
         rows = table.findAll('tr', attrs={'class': re.compile('(odd|even)row')})
@@ -2222,7 +2230,7 @@ class NFL(callbacks.Plugin):
 
         output = coachlist.get(str(optteam), None)
         if not output:
-            irc.reply("Something went horribly wrong looking up the coach for {0}.".format(optteam))
+            irc.reply("ERROR: Something went horribly wrong looking up the coach for {0}.".format(optteam))
             return
         else:
             irc.reply("The NFL coach for {0} is {1}".format(self._red(optteam), output))
@@ -2249,9 +2257,9 @@ class NFL(callbacks.Plugin):
 
         for article in jsondata[0:6]:
             title = article.get('title', None)
-            desc = article.get('description', None)
+            # desc = article.get('description', None)
             link = article.get('linkURL', None)
-            date = article.get('date_ago', None)
+            # date = article.get('date_ago', None)
 
             if title and link:
                 output = "{0} - {1}".format(self._bold(title), self._shortenUrl(link))
