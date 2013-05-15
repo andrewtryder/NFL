@@ -1072,12 +1072,12 @@ class NFL(callbacks.Plugin):
         # must title this category
         optcategory = optcategory.title()
         if optcategory not in statsCategories:
-            irc.reply("ERROR: Category must be one of: {0}".format(sorted(statsCategories.keys())))
+            irc.reply("ERROR: Category must be one of: {0}".format(" | ".join(sorted(statsCategories.keys()))))
             return
         # category statkey is lower.
         optstat = optstat.lower()
         if optstat not in statsCategories[optcategory]:
-            irc.reply("ERROR: Stat for {0} must be one of: {1}".format(optcategory, statsCategories[optcategory].keys()))
+            irc.reply("ERROR: Stat for {0} must be one of: {1}".format(optcategory, " | ".join(sorted(statsCategories[optcategory].keys()))))
             return
         # if we have a year.
         if optyear:
@@ -1126,7 +1126,8 @@ class NFL(callbacks.Plugin):
 
     def nflteamrankings(self, irc, msg, args, optteam):
         """<team>
-        Display team rankings for off/def versus the rest of the NFL. Ex: NE
+        Display team rankings for off/def versus the rest of the NFL.
+        Ex: NE
         """
 
         # test for valid teams.
