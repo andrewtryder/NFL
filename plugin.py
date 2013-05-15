@@ -627,7 +627,7 @@ class NFL(callbacks.Plugin):
 
         for td in tds:
             team = td.findPrevious('h2', attrs={'class':'shsTableTitle'})
-            team = self._translateTeam('team', 'full', str(team.getText()))  # translate full team into abbr.
+            team = self._translateTeam('team', 'full', team.getText())  # translate full team into abbr.
             player = td.find('a')
             appendString = "{0}".format(self._bold(player.getText()))
             report = td.findNext('td', attrs={'class':'shsRow0Col shsNamD'})
@@ -717,25 +717,20 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'class':'main'})
-        if not table:
-            irc.reply("ERROR: Something broke in formatting with nflweather. Is it the offseason?")
-            return
-
         tbody = table.find('tbody')
         rows = tbody.findAll('tr')
-
+        # container for output.
         weatherList = collections.defaultdict(list)
-
-        for row in rows:  # grab all, parse, throw into a defaultdict for get method.
-            tds = row.findAll('td')
-            awayTeam = str(self._translateTeam('team', 'short', tds[0].getText()))  # translate into the team for each.
-            homeTeam = str(self._translateTeam('team', 'short', tds[4].getText()))
-            timeOrScore = tds[5].getText()
-            gameTemp = tds[8].getText()
-
+        # each row is a game.
+        for row in rows:
+            tds = [item.getText() for item in row.findAll('td')]
+            awayTeam = self._translateTeam('team', 'short', tds[0])  # translate into the team for each.
+            homeTeam = self._translateTeam('team', 'short', tds[4])
+            timeOrScore = tds[5]
+            gameTemp = tds[8]
             appendString = "{0}@{1} - {2} - {3}".format(awayTeam, self._bold(homeTeam), timeOrScore, gameTemp)
             weatherList[awayTeam].append(appendString)
             weatherList[homeTeam].append(appendString)
@@ -753,18 +748,16 @@ class NFL(callbacks.Plugin):
         Display latest NFL transactions.
         """
 
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC90cmFuc2FjdGlvbnM=')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html)
         div = soup.find('div', attrs={'id':'my-teams-table'})
-        if not div:
-            irc.reply("ERROR: Something went horribly wrong on formatting.")
-            return
         table = div.find('table', attrs={'class':'tablehead'})
         rows = table.findAll('tr', attrs={'class':re.compile('^oddrow team.*|^evenrow team.*')})
 
@@ -792,14 +785,11 @@ class NFL(callbacks.Plugin):
         """
 
         # must test the date.
-        testdate = self._validate(str(optyear), '%Y')
-        if not testdate:
-            irc.reply("ERROR: Invalid year. Must be YYYY.")
+        testdate = self._validate(optyear, '%Y')
+        if not testdate and 1950 <= optyear <= datetime.datetime.now().year:
+            irc.reply("ERROR: Invalid year. Must be YYYY. Year must also be between 1950 and current year.")
             return
-        if not 1950 <= optyear <= datetime.datetime.now().year:
-            irc.reply("ERROR: Year must be 1950 or after until the current year.")
-            return
-        # url.
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS95ZWFycw==') + '/%s/probowl.htm' % optyear
         html = self._httpget(url)
         if not html:
@@ -809,28 +799,26 @@ class NFL(callbacks.Plugin):
         # process html
         soup = BeautifulSoup(html)
         h1 = soup.find('h1')
-        if not soup.find('table', attrs={'id':'pro_bowl'}):  # one last sanity check
-            irc.reply("ERROR: Something broke trying to read probowl data page. Did you try and check the current year before the roster is out?")
-            return
         table = soup.find('table', attrs={'id':'pro_bowl'}).find('tbody')
         rows = table.findAll('tr', attrs={'class':''})
         # setup containers
-        teams = {}
-        positions = {}
-        players = []
+        teams = {}  # container to count teams.
+        positions = {}  # container to count positions.
+        players = []  # put all in a container to output.
         # process each player.
         for row in rows:
-            tds = row.findAll('td')
-            pos = str(tds[0].getText())
-            player = str(tds[1].getText())
-            tm = str(tds[2].getText())
-            teams[tm] = teams.get(tm, 0) + 1 # to count teams
-            positions[pos] = positions.get(pos, 0) + 1 # to count positions
+            tds = [item.getText() for item in row.findAll('td')]
+            pos = tds[0]
+            player = tds[1]
+            tm = tds[2]
+            teams[tm] = teams.get(tm, 0) + 1 # team++.
+            positions[pos] = positions.get(pos, 0) + 1 # positions++.
             players.append("{0}, {1} ({2})".format(self._bold(player), tm, pos)) # append player to list
         # we display the heading, total teams (len) and use teams, sorted in rev, top10.
         irc.reply("{0} :: Total Players: {1} - Total Teams: {2} - Top Teams: {3}".format(\
             self._red(h1.getText()), self._ul(len(players)), self._ul(len(teams)),\
-                [k + ": " + str(v) for (k,v) in sorted(teams.items(), key=lambda x: x[1], reverse=True)[0:10]]))
+            [k + ": " + str(v) for (k,v) in sorted(teams.items(), key=lambda x: x[1], reverse=True)[0:10]]))
+        # now output players.
         irc.reply("{0}".format(" | ".join(players)))
 
     nflprobowl = wrap(nflprobowl, [('int')])
@@ -863,15 +851,15 @@ class NFL(callbacks.Plugin):
         div = soup.find('div', attrs={'class':'standing'})
         table = div.find('table')
         rows = table.findAll('tr', attrs={'class':'data'})
-
+        # container for output.
         append_list = []
-
+        # each row is a fine.
         for row in rows[0:int(optnumber)]:
             tds = [item.getText() for item in row.findAll('td')]
             # team = tds[2] # team is broken due to html comments
             append_list.append("{0} {1} {2} :: {3}".format(tds[0], self._bold(tds[3]), tds[4], tds[5]))
 
-        for i,each in enumerate(append_list[0:int(optnumber)]):
+        for i, each in enumerate(append_list[0:int(optnumber)]):
             if i is 0:  # only for header row.
                 irc.reply("Latest {0} :: Total {1} Fines.".format(heading.getText(), len(rows)))
                 irc.reply(each)
@@ -885,33 +873,31 @@ class NFL(callbacks.Plugin):
         Display weekly NFL Leaders in various categories.
         """
 
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL2xlYWRlcnM/d2pi')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
-        soup = BeautifulSoup(html.replace('&nbsp;',''))
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
         tables = soup.findAll('table', attrs={'class':'table'})
         subheading = soup.find('div', attrs={'class':'sub dark'})
-
+        # container output.
         weeklyleaders = collections.defaultdict(list)
-
         # parse each table, which is a stat category.
         for table in tables:
             rows = table.findAll('tr')  # all rows, first one, below, is the heading
             heading = rows[0].find('td', attrs={'class':'sec row', 'width':'65%'})
             append_list = []  # container per list
-            for i,row in enumerate(rows[1:]):  # rest of the rows, who are leaders.
+            for i, row in enumerate(rows[1:]):  # rest of the rows, who are leaders.
                 tds = row.findAll('td')
-                #rnk = tds[0]
                 player = tds[1]
                 stat = tds[2]  # +1 the count so it looks normal, bold player/team and append.
                 append_list.append("{0}. {1} ({2})".format(i+1, self._bold(player.getText()), stat.getText()))
             # one we have everything in the string, append, so we can move into the next category.
-            weeklyleaders[str(heading.getText())] = append_list
-
+            weeklyleaders[heading.getText()] = append_list
         # output time.
         for i,x in weeklyleaders.items():
             irc.reply("{0} {1} :: {2}".format(self._red(i), self._red(subheading.getText()), " ".join(x)))
@@ -987,11 +973,10 @@ class NFL(callbacks.Plugin):
     nfltopsalary = wrap(nfltopsalary, [(getopts({'average':'', 'caphit':''})), optional('somethingWithoutSpaces')])
 
     def nflleagueleaders(self, irc, msg, args, optlist, optcategory, optstat, optyear):
-        """[--postseason|--num20] <category> <stat> [year]
+        """[--postseason] <category> <stat> [year]
         Display NFL statistical leaders in a specific category for a stat. Year, which can go back until 2001, is optional.
-        Ex: Passing td or Punting punts 2003. Stats show regular season.
         Use --postseason to show post-season stats.
-        Use --num20 prefix to show top20 instead of top10.
+        Ex: Passing td or Punting punts 2003. Stats show regular season.
         """
 
         statsCategories = {
@@ -1084,35 +1069,28 @@ class NFL(callbacks.Plugin):
                     'safety':'115'
                 }
             }
-
-        optcategory = optcategory.title()  # must title this category
-
+        # must title this category
+        optcategory = optcategory.title()
         if optcategory not in statsCategories:
-            irc.reply("Category must be one of: %s" % statsCategories.keys())
+            irc.reply("ERROR: Category must be one of: {0}".format(sorted(statsCategories.keys())))
             return
-
-        optstat = optstat.lower()  # stat key is lower. value is #.
-
+        # category statkey is lower.
+        optstat = optstat.lower()
         if optstat not in statsCategories[optcategory]:
-            irc.reply("Stat for %s must be one of: %s" % (optcategory, statsCategories[optcategory].keys()))
+            irc.reply("ERROR: Stat for {0} must be one of: {1}".format(optcategory, statsCategories[optcategory].keys()))
             return
-
+        # if we have a year.
         if optyear:
             testdate = self._validate(optyear, '%Y')
-            if not testdate:
-                irc.reply("Invalid year. Must be YYYY.")
+            if not testdate and int(optyear) < 2000:
+                irc.reply("ERROR: Invalid year. Must be YYYY. Year must also be between 2001 and current year.")
                 return
-            if int(optyear) < 2000:
-                irc.reply("Year must be 2001 or after.")
-                return
-
-        postseason, outlimit = False, '10'
+        # handle --optlist.
+        postseason = False
         for (option, arg) in optlist:
             if option == 'postseason':
                 postseason = True
-            if option == 'num20':
-                outlimit = '20'
-
+        # build url and fetch.
         url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3N0YXRzL2J5Y2F0ZWdvcnk=')
         url += '?cat=%s&conference=NFL&sort=%s&timeframe=All' % (optcategory, statsCategories[optcategory][optstat])
         if optyear:  # don't need year for most current.
@@ -1120,32 +1098,31 @@ class NFL(callbacks.Plugin):
                 url += '&year=season_%s' % optyear
             else:
                 url += '&year=postseason_%s' % optyear
-
+        # build and fetch url.
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html.replace('&nbsp;',''))
         selectedyear = soup.find('select', attrs={'name':'year'}).find('option', attrs={'selected':'selected'})  # creative way to find the year.
         table = soup.find('tr', attrs={'class':'ysptblthmsts', 'align':'center'}).findParent('table')
-        header = table.findAll('tr')[1].findAll('td')
-        rows = table.findAll('tr')[2:]
-
+        # header = table.findAll('tr')[1].findAll('td')
+        rows = table.findAll('tr')[2:]  # start at 3 due to headers.
+        # container we'll put all stats in.
         append_list = []
-
-        for row in rows[0:int(outlimit)]:
-            name = str(row.findAll('td')[0].getText())  # always first
-            team = str(row.findAll('td')[1].getText())  # always next
+        # each row is a player, ranked in order.
+        for row in rows:
+            tds = [item for item in row.findAll('td')]
             sortfield = row.find('span', attrs={'class':'yspscores'})  # whatever field you are sorting by will have this span inside the td.
-            append_list.append("{0} ({1}) - {2}".format(self._bold(name), team, sortfield.getText()))
-
-        title = "Top {0} in {1}({2}) for {3}".format(outlimit, optcategory, optstat, selectedyear.getText())
+            append_list.append("{0} ({1}) - {2}".format(self._bold(tds[0].getText()), tds[1].getText(), sortfield.getText()))
+        # output time.
+        title = "Top in {0}({1}) for {2}".format(optcategory, optstat, selectedyear.getText())
         output = "{0} :: {1}".format(self._red(title), " | ".join([item for item in append_list]))
         irc.reply(output)
 
-    nflleagueleaders = wrap(nflleagueleaders, [(getopts({'postseason':'', 'num20':''})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
+    nflleagueleaders = wrap(nflleagueleaders, [(getopts({'postseason':''})), ('somethingWithoutSpaces'), ('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
 
     def nflteamrankings(self, irc, msg, args, optteam):
         """<team>
