@@ -16,6 +16,7 @@ import json
 import sqlite3
 import os.path
 import unicodedata
+import base64
 from operator import itemgetter
 
 # supybot libs
@@ -106,11 +107,10 @@ class NFL(callbacks.Plugin):
         """Convert from one dateformat to another."""
 
         try:
-            d = datetime.datetime.strptime(instring, infmt)
-            output = d.strftime(outfmt)
+            d = datetime.datetime.strptime(str(instring), infmt)
+            return d.strftime(outfmt)
         except:
-            output = instring
-        return output
+            return instring
 
     def _validate(self, date, format):
         """Return true or false for valid date based on format."""
@@ -148,7 +148,6 @@ class NFL(callbacks.Plugin):
     def _b64decode(self, string):
         """Returns base64 encoded string."""
 
-        import base64
         return base64.b64decode(string)
 
     def _int_to_roman(self, i):
@@ -190,24 +189,24 @@ class NFL(callbacks.Plugin):
     def _sanitizeName(self, name):
         """ Sanitize name. """
 
-        name = name.lower()
-        name = name.replace('.','')
-        name = name.replace('-','')
-        name = name.replace("'",'')
+        name = name.lower()  # lower.
+        name = name.replace('.','')  # remove periods.
+        name = name.replace('-','')  # remove dashes.
+        name = name.replace("'",'')  # remove apostrophies.
         # possibly strip jr/sr/III suffixes in here?
         return name
 
     def _similarPlayers(self, optname):
         """Return a dict containing the five most similar players based on optname."""
 
-        optname = self._sanitizeName(optname)
-        db = sqlite3.connect(self._playersdb)
-        cursor = db.cursor()
-        cursor.execute("select eid, rid, fullname from players")
-        rows = cursor.fetchall()
-        db.close()
+        optname = self._sanitizeName(optname)  # first sanitize.
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT eid, rid, fullname FROM players")
+            rows = cursor.fetchall()
+        # container for out.
         outlist = []
-
+        # iterate over each and put into a dict, insert into list.
         for row in rows:
             tmpdict = {}
             tmpdict['dist'] = int(utils.str.distance(str(optname), str(row[2])))
@@ -215,61 +214,60 @@ class NFL(callbacks.Plugin):
             tmpdict['rid'] = row[1]
             tmpdict['eid'] = row[0]
             outlist.append(tmpdict)
-
+        # sort the list and keep the top5.
         outlist = sorted(outlist, key=itemgetter('dist'), reverse=False)[0:5]
         return outlist
 
     def _playerLookup(self, table, optname):
         """Return the specific id in column (eid, rid) for player."""
 
-        optname = self._sanitizeName(optname)
-        db = sqlite3.connect(self._playersdb)
-        cursor = db.cursor()
-        query = "select %s from players WHERE eid in (select id from aliases WHERE name LIKE ? )" % (table)
-        cursor.execute(query, ('%'+optname+'%',))
-        aliasrow = cursor.fetchone()
-
-        if aliasrow is None:
+        optname = self._sanitizeName(optname)  # first sanitize.
+        with sqlite3.connect(self._playersdb) as db:
             cursor = db.cursor()
-            query = "select %s from players WHERE fullname LIKE ?" % (table)
-            cursor.execute(query, ('%'+optname.replace(' ', '%')+'%',))  # wrap in % and replace space with wc.
-            row = cursor.fetchone()
-            if row is None:  # we did not find a %name%match% nor alias.
-                namesplit = optname.split()
-                if len(namesplit) > 1:  # we have more than one, first and last. assume 0 is first, 1 is last.
-                    fndm = doublemetaphone.dm(unicode(namesplit[0]))
-                    lndm = doublemetaphone.dm(unicode(namesplit[1]))
-                    if lndm[1] != '':  # if we have a secondary dm code.
-                        query = "select %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
-                    else:
-                        query = "select %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
-                    if fndm[1] != '': # likewise with first name.
-                        query += " AND fndm1='%s' AND fndm2='%s'" % (fndm[0], fndm[1])
-                    else:
-                        query += " AND fndm1='%s'" % (fndm[0])
-                else:  # assume one name given and that we check only on the last.
-                    lndm = doublemetaphone.dm(unicode(namesplit[0]))
-                    if lndm[1] != '':  # secondary dm code.
-                        query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
-                    else:
-                        query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
-                # now that we have DM query, execute.
-                cursor.execute(query)
+            query = "SELECT %s FROM players WHERE eid IN (SELECT id FROM aliases WHERE name LIKE ? )" % (table)
+            cursor.execute(query, ('%'+optname+'%',))
+            aliasrow = cursor.fetchone()
+            if aliasrow is None:  # if no alias.
+                cursor = db.cursor()
+                query = "SELECT %s FROM players WHERE fullname LIKE ?" % (table)
+                cursor.execute(query, ('%'+optname.replace(' ', '%')+'%',))  # wrap in % and replace space with wc.
                 row = cursor.fetchone()
-                if row is None:  # dm failed. last chance to try. Using edit distance.
-                    names = self._similarPlayers(optname)
-                    if names[0]['dist'] < 7:  # edit distance less than seven, return.
-                        optid = str(names[0][table])  # first one, less than seven, return eid.
-                    else:  # after everything, we found nothing. Return 0
-                        optid = "0"
-                else: # dm worked so we return.
+                if row is None:  # we did not find a %name%match% nor alias.
+                    namesplit = optname.split()
+                    if len(namesplit) > 1:  # we have more than one, first and last. assume 0 is first, 1 is last.
+                        fndm = doublemetaphone.dm(unicode(namesplit[0]))
+                        lndm = doublemetaphone.dm(unicode(namesplit[1]))
+                        if lndm[1] != '':  # if we have a secondary dm code.
+                            query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
+                        else:
+                            query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
+                        if fndm[1] != '': # likewise with first name.
+                            query += " AND fndm1='%s' AND fndm2='%s'" % (fndm[0], fndm[1])
+                        else:
+                            query += " AND fndm1='%s'" % (fndm[0])
+                    else:  # assume one name given and that we check only on the last.
+                        lndm = doublemetaphone.dm(unicode(namesplit[0]))
+                        if lndm[1] != '':  # secondary dm code.
+                            query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
+                        else:
+                            query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
+                    # now that we have DM query, execute.
+                    cursor.execute(query)  # query constructed above.
+                    row = cursor.fetchone()
+                    if row is None:  # dm failed. last chance to try. Using edit distance.
+                        names = self._similarPlayers(optname)
+                        if names[0]['dist'] < 7:  # edit distance less than seven, return.
+                            optid = str(names[0][table])  # first one, less than seven, return eid.
+                        else:  # after everything, we found nothing. Return 0
+                            optid = "0"
+                    else: # dm worked so we return.
+                        optid = str(row[0])
+                else:  # fullname query worked so return.
                     optid = str(row[0])
-            else:  # fullname query worked so return.
-                optid = str(row[0])
-        else:  # return the id but from alias.
-            optid = str(aliasrow[0])
+            else:  # return the id but from alias.
+                optid = str(aliasrow[0])
         # close db and return the id.
-        db.close()
+        #db.close()
         return optid
 
     def _allteams(self, conf=None, div=None):
@@ -342,65 +340,62 @@ class NFL(callbacks.Plugin):
 
     def nflplayeraddalias(self, irc, msg, args, optid, optalias):
         """<eid> <alias>
-        Add a player alias. Ex: 2330 gisele
+        Add a player alias.
+        Ex: 2330 gisele
         """
 
         optalias = optalias.lower()  # sanitize name so it conforms.
-
-        db = sqlite3.connect(self._playersdb)
-        cursor = db.cursor()
-        try:
-            cursor.execute('PRAGMA foreign_keys=ON')
-            cursor.execute("INSERT INTO aliases VALUES (?, ?)", (optid, optalias,))
-            db.commit()
-            irc.reply("I have successfully added {0} as an alias to '{1} ({2})'.".format(optalias, self._eidlookup(optid), optid))
-        except sqlite3.Error, e:
-            # ERROR: I cannot insert alias: column name is not unique
-            # ERROR: I cannot insert alias: foreign key constraint failed
-            irc.reply("ERROR: I cannot insert alias: {0}".format(e)) #(e.args[0]))
-        db.close()
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            try:
+                cursor.execute('PRAGMA foreign_keys=ON')
+                cursor.execute("INSERT INTO aliases VALUES (?, ?)", (optid, optalias,))
+                db.commit()
+                irc.reply("I have successfully added {0} as an alias to '{1} ({2})'.".format(optalias, self._eidlookup(optid), optid))
+            except sqlite3.Error, e:  # more descriptive error messages? (column name is not unique, foreign key constraint failed)
+                irc.reply("ERROR: I cannot insert alias: {0}".format(e)) #(e.args[0]))
 
     nflplayeraddalias = wrap(nflplayeraddalias, [('checkCapability', 'admin'), ('int'), ('text')])
 
     def nflplayerdelalias(self, irc, msg, args, optalias):
         """<player alias>
-        Delete a player alias. Ex: gisele
+        Delete a player alias.
+        Ex: gisele
         """
 
-        optalias = optalias.lower()
-        # conn.text_factory = str
-        db = sqlite3.connect(self._playersdb)
-        cursor = db.cursor()
-        cursor.execute("SELECT id FROM aliases WHERE name=?", (optalias,))
-        rowid = cursor.fetchone()
-        if not rowid:
-            irc.reply("ERROR: I do not have any aliases under '{0}'.".format(optalias))
-            return
-        else:
-            cursor.execute("DELETE FROM aliases WHERE name=?", (optalias,))
-            db.commit()
-            irc.reply("I have successfully deleted the player alias '{0}' from '{1} ({2})'.".format(optalias, self._eidlookup(rowid[0]), rowid[0]))
-        db.close()
+        optalias = optalias.lower()  # sanitize name.
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT id FROM aliases WHERE name=?", (optalias,))
+            rowid = cursor.fetchone()
+            if not rowid:
+                irc.reply("ERROR: I do not have any aliases under '{0}'.".format(optalias))
+                return
+            else:
+                cursor.execute("DELETE FROM aliases WHERE name=?", (optalias,))
+                db.commit()
+                irc.reply("I have successfully deleted the player alias '{0}' from '{1} ({2})'.".format(optalias, self._eidlookup(rowid[0]), rowid[0]))
 
     nflplayerdelalias = wrap(nflplayerdelalias, [('checkCapability', 'admin'), ('text')])
 
     def nflplayeralias(self, irc, msg, args, optplayer):
-        """<player>
-        Fetches aliases for player.
+        """<player|eid>
+        Fetches aliases for player. Specify the player name or their eid.
+        Ex: Tom Brady or 2330.
         """
 
-        if optplayer.isdigit():
+        if optplayer.isdigit():  # no need to lookup if we have the EID.
             pass
         else:
             lookupid = self._playerLookup('eid', optplayer)
-        if lookupid == "0":
-            irc.reply("ERROR: I did not find any NFL player in the DB matching: {0}".format(optplayer))
-            return
+            if lookupid == "0":
+                irc.reply("ERROR: I did not find any NFL player in the DB matching: {0}".format(optplayer))
+                return
 
-        db = sqlite3.connect(self._playersdb)
-        cursor = db.cursor()
-        cursor.execute("SELECT name FROM aliases WHERE id=?", (lookupid,))
-        rows = cursor.fetchall()
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT name FROM aliases WHERE id=?", (lookupid,))
+            rows = cursor.fetchall()
 
         if len(rows) > 0:
             output = ' | '.join([item[0] for item in rows])
@@ -416,43 +411,53 @@ class NFL(callbacks.Plugin):
     ####################
 
     def nflteams(self, irc, msg, args, optconf, optdiv):
-        """<conf> <div>
-        Display a list of NFL teams for input. Optional: use AFC or NFC for conference.
-        Optionally, it can also display specific divisions with North, South, East or West. Ex: nflteams AFC East
+        """[conference] [division]
+        Display a list of NFL teams for input.
+        Optional: use AFC or NFC for conference.
+        Optionally, it can also display specific divisions with North, South, East or West.
+        Ex: nflteams or nflteams AFC or nflteams AFC East.
         """
 
-        if optconf and not optdiv:
+        # first, check and lower our inputs if we have them.
+        if optconf:
             optconf = optconf.lower()
-            if optconf == "afc" or optconf == "nfc":
-                teams = self._validteams(conf=optconf)
-            else:
-                irc.reply("Conference must be AFC or NFC")
-                return
-
-        if optconf and optdiv:
-            optconf = optconf.lower()
+        if optdiv:
             optdiv = optdiv.lower()
-
+        # now decide what the query is based on input.
+        if not optconf and not optdiv:  # all teams (no arguments)
+            teams = self._allteams()
+        elif optconf and not optdiv:  # just a conference (ex: NFC)
+            if optconf == "afc" or optconf == "nfc":
+                teams = self._allteams(conf=optconf)
+            else:  # text must be afc or nfc.
+                irc.reply("ERROR: Conference must be AFC or NFC")
+                return
+        elif optconf and optdiv:  # conf and div (ex: NFC North)
             if optconf == "afc" or optconf == "nfc":
                 if optdiv == "north" or optdiv == "south" or optdiv == "east" or optdiv == "west":
-                    teams = self._validteams(conf=optconf, div=optdiv)
+                    teams = self._allteams(conf=optconf, div=optdiv)
                 else:
-                    irc.reply("Division must be: North, South, East or West")
+                    irc.reply("ERROR: Division must be: North, South, East or West")
                     return
             else:
-                irc.reply("Conference must be AFC or NFC")
+                irc.reply("ERROR: Conference must be AFC or NFC")
                 return
-
-        if not optconf and not optdiv:
-            teams = self._validteams()
-
-        irc.reply("Valid teams are: {0}".format(" | ".join([ircutils.bold(item) for item in teams])))
+        # output. conditional output.
+        if optconf and not optdiv:  # just a conf (ex: NFC).
+            output = "{0} teams ::".format(optconf.upper())
+        elif optconf and optdiv:  # conf and div (ex: NFC North)
+            output = "{0} {1} teams ::".format(optconf.upper(), optdiv.title())
+        else:  # all teams.
+            output = "NFL teams ::"
+        # now the actual output.
+        irc.reply("{0} {1}".format(output, teams))
 
     nflteams = wrap(nflteams, [optional('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
 
     def nflhof(self, irc, msg, args, optyear):
         """[year]
         Display NFL Hall Of Fame inductees for year. Defaults to the latest year.
+        Ex: 2010
         """
 
         if optyear:
@@ -498,7 +503,8 @@ class NFL(callbacks.Plugin):
 
     def nflawards(self, irc, msg, args, optyear):
         """<year>
-        Display NFL Awards for a specific year. Use a year from 1966 on. Ex: 2003
+        Display NFL Awards for a specific year. Use a year from 1966 on.
+        Ex: 2003
         """
 
         testdate = self._validate(optyear, '%Y')
@@ -2274,6 +2280,7 @@ class NFL(callbacks.Plugin):
     def nflplayers(self, irc, msg, args, optname):
         """<player>
         Search and find NFL players. Must enter exact/approx name since no fuzzy matching is done here.
+        Ex: tom brady
         """
 
         optplayer = self._sanitizeName(optname)  # sanitize optname
@@ -2295,7 +2302,8 @@ class NFL(callbacks.Plugin):
 
     def nflgame(self, irc, msg, args, optplayer):
         """<player>
-        Display NFL player's game log for current/active game. Ex: Eli Manning
+        Display NFL player's game log for current/active game.
+        Ex: Eli Manning
         """
 
         lookupid = self._playerLookup('eid', optplayer)
@@ -2346,8 +2354,10 @@ class NFL(callbacks.Plugin):
 
     def nflplayernews(self, irc, msg, args, optplayer):
         """<player>
-        Display latest news for NFL player. Ex: Tom Brady
+        Display latest news for NFL player.
+        Ex: Tom Brady
         """
+
         useSPN = False  # simple bypass as I found wrold but am not sure how long it will work.
         if useSPN:  # conditional to use SPN here. We'll use rworld.
             lookupid = self._playerLookup('eid', optplayer)
@@ -2419,7 +2429,8 @@ class NFL(callbacks.Plugin):
 
     def nflinfo(self, irc, msg, args, optplayer):
         """<player>
-        Display basic information on NFL player. Ex: Tom Brady
+        Display basic information on NFL player.
+        Ex: Tom Brady
         """
 
         lookupid = self._playerLookup('eid', optplayer)
@@ -2459,7 +2470,8 @@ class NFL(callbacks.Plugin):
 
     def nflcontract(self, irc, msg, args, optplayer):
         """<player>
-        Display NFL contract for Player Name. Ex: Ray Lewis
+        Display NFL contract for Player Name.
+        Ex: Tom Brady
         """
 
         lookupid = self._playerLookup('rid', optplayer)
@@ -2496,7 +2508,8 @@ class NFL(callbacks.Plugin):
 
     def nflcareerstats(self, irc, msg, args, optplayer):
         """<player>
-        Look up NFL career stats for a player. Ex: nflcareerstats tom brady
+        Look up NFL career stats for a player.
+        Ex: Tom Brady
         """
 
         lookupid = self._playerLookup('eid', optplayer)
@@ -2513,7 +2526,7 @@ class NFL(callbacks.Plugin):
             return
 
         if "No stats available." in html:
-            irc.reply("No stats available for: %s" % optplayer)
+            irc.reply("No stats available for: {0}. Perhaps they play a position without formal stats?".format(optplayer))
             return
 
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
@@ -2571,7 +2584,7 @@ class NFL(callbacks.Plugin):
         if postostats.has_key(pos):  # if we want specific stats.
             for each in postostats[pos]:
                 if statcategories.has_key(each):
-                    output.append("{0}: {1}".format(ircutils.underline(each.title()), " | ".join(stats.get(statcategories[each]))))
+                    output.append("{0}: {1}".format(self._ul(each.title()), " | ".join(stats.get(statcategories[each]))))
         else:
             output.append("No stats for the {0} position.".format(pos))
 
@@ -2584,8 +2597,9 @@ class NFL(callbacks.Plugin):
 
     def nflseason(self, irc, msg, args, optlist, optplayer):
         """[--year DDDD] <player>
-        Look up NFL Season stats for a player. Ex: nflseason tom brady.
-        To look up a different year, use --year YYYY. Ex: nflseason --year 2010 tom brady
+        Look up NFL Season stats for a player.
+        To look up a different year, use --year YYYY.
+        Ex: Tom brady or --year 2010 Tom Brady
         """
 
         season = False
