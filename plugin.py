@@ -106,7 +106,7 @@ class NFL(callbacks.Plugin):
     def _dtFormat(self, outfmt, instring, infmt):
         """Convert from one dateformat to another."""
 
-        try:
+        try:  # infmt/outfmt = "%m/%d/%Y"
             d = datetime.datetime.strptime(str(instring), infmt)
             return d.strftime(outfmt)
         except:
@@ -116,7 +116,7 @@ class NFL(callbacks.Plugin):
         """Return true or false for valid date based on format."""
 
         try:
-            datetime.datetime.strptime(str(date), format) # format = "%m/%d/%Y"
+            datetime.datetime.strptime(str(date), format)
             return True
         except ValueError:
             return False
@@ -182,9 +182,9 @@ class NFL(callbacks.Plugin):
         except:
             return url
 
-    ######################
-    # DATABASE FUNCTIONS #
-    ######################
+    ###############################
+    # INTERNAL DATABASE FUNCTIONS #
+    ###############################
 
     def _sanitizeName(self, name):
         """ Sanitize name. """
@@ -299,7 +299,7 @@ class NFL(callbacks.Plugin):
             aliasrow = cursor.fetchone()
             if not aliasrow:  # no alias found so we're gonna check team
                 query = "SELECT team FROM nfl WHERE team=?"
-                cursor.execute(query, (optteam.upper(),)) # standard lookup. go upper. nyy->NYY.
+                cursor.execute(query, (optteam.upper(),)) # standard lookup. go upper. nyj->NYJ.
                 teamrow = cursor.fetchone()
                 if not teamrow:  # team is not found. Error.
                     returnval = 1  # checked in each command.
@@ -334,9 +334,27 @@ class NFL(callbacks.Plugin):
         else:
             return None
 
-    ###################
-    # ALIAS FUNCTIONS #
-    ###################
+    ########################################
+    # ALIAS AND PLAYER DB PUBLIC FUNCTIONS #
+    ########################################
+
+    def nflplayeradd(self, irc, msg, args, opteid, optrid, optplayer):
+        """
+        """
+
+        pass
+
+    nflplayeradd = wrap(nflplayeradd, [('checkCapability', 'admin'), ('int'), ('int'), ('text')])
+
+    def nflplayerdel(self, irc, msg, args, opteid):
+        """<eID>
+        Delete a specific player from the database. Must specify their eID.
+        Ex: 2331
+        """
+
+        pass
+
+    nflplayerdel = wrap(nflplayerdel, [('checkCapability', 'admin'), ('int')])
 
     def nflplayeraddalias(self, irc, msg, args, optid, optalias):
         """<eid> <alias>
@@ -450,49 +468,45 @@ class NFL(callbacks.Plugin):
         else:  # all teams.
             output = "NFL teams ::"
         # now the actual output.
-        irc.reply("{0} {1}".format(output, teams))
+        irc.reply("Valid {0} {1}".format(output, teams))
 
     nflteams = wrap(nflteams, [optional('somethingWithoutSpaces'), optional('somethingWithoutSpaces')])
 
     def nflhof(self, irc, msg, args, optyear):
         """[year]
-        Display NFL Hall Of Fame inductees for year. Defaults to the latest year.
+        Display NFL Hall Of Fame inductees for year 1963 and on. Defaults to the latest year.
         Ex: 2010
         """
 
-        if optyear:
+        if optyear:  # check for year or use the "last".
             testdate = self._validate(optyear, '%Y')
             if not testdate or int(optyear) < 1963:  # superbowl era and on.
                 irc.reply("ERROR: Invalid year. Must be YYYY and after 1963.")
                 return
-
+        # build and process url.
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS9ob2Yv')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'id':'hofers'})
         rows = table.findAll('tr', attrs={'class':''})
-
+        # dict container for output.
         nflhof = collections.defaultdict(list)
-
+        # each row on the page is HOF. insert with key as year, value is the player.
         for row in rows:
             num = row.find('td', attrs={'align':'right'})
             if num:
-                tds = row.findAll('td')
-                player = tds[1].getText()
-                pos = tds[2].getText()
-                year = tds[3].getText()
-                nflhof[int(year)].append("{0} ({1})".format(player, pos))
-
-        if not optyear:  # if we don't have one specified, get the last year in the sort.
+                tds = [item.getText() for item in row.findAll('td')]
+                nflhof[int(tds[3])].append("{0} ({1})".format(tds[1], tds[2]))
+        # if we don't have one specified, get the last year in the sort.
+        if not optyear:
             optyear = nflhof.keys()[-1]
-
+        # output time.
         output = nflhof.get(int(optyear), None)
-
         if not output:
             irc.reply("ERROR: Something broke looking up HOF class for: {0}".format(optyear))
             return
@@ -503,7 +517,7 @@ class NFL(callbacks.Plugin):
 
     def nflawards(self, irc, msg, args, optyear):
         """<year>
-        Display NFL Awards for a specific year. Use a year from 1966 on.
+        Display NFL Awards for a specific year. Use a year from 1966 on to the current year.
         Ex: 2003
         """
 
@@ -511,17 +525,17 @@ class NFL(callbacks.Plugin):
         if not testdate or int(optyear) < 1966:  # superbowl era and on.
             irc.reply("ERROR: Invalid year. Must be YYYY and after 1966.")
             return
-
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS95ZWFycy8=') + '%s/' % optyear # 1966 on.
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process HTML.
         soup = BeautifulSoup(html)
         if not soup.find('h2', text="Award Winners"):
-            irc.reply("ERROR: Could not find NFL Awards for the %s season. Perhaps formatting changed or you are asking for the current season in-progress." % optyear)
+            irc.reply("ERROR: Could not find NFL Awards for the {0} season. Perhaps you are asking for the current season in-progress.".format(optyear))
             return
 
         table = soup.find('h2', text="Award Winners").findParent('div', attrs={'id':'awards'}).find('table')
@@ -549,7 +563,6 @@ class NFL(callbacks.Plugin):
         if optbowl.isdigit():  # if fed digits, check if it's between 1966 and cur year..
             if not 1966 <= int(optbowl) <= datetime.datetime.now().year: # < 1966 is really what we need here.
                 optbowl = self._int_to_roman(int(optbowl))  # convert to roman.
-
         # fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS9zdXBlci1ib3dsLw==')
         html = self._httpget(url)
@@ -643,12 +656,9 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # check to make sure year is valid and between 1965 and now.
-        testdate = self._validate(str(optyear), '%Y')
-        if not testdate:
-            irc.reply("ERROR: Invalid year. Must be YYYY.")
-            return
-        if 1965 > int(optyear) > datetime.datetime.now().year:
-            irc.reply("ERROR: Year must be between 1965 and the current year.")
+        testdate = self._validate(optyear, '%Y')
+        if not testdate and (1965 > int(optyear) > datetime.datetime.now().year):
+            irc.reply("ERROR: Invalid year. Must be YYYY and between 1965 and the current year.")
             return
         # build URL.
         url = self._b64decode('aHR0cDovL3d3dy5kcmFmdGhpc3RvcnkuY29tL2luZGV4LnBocC95ZWFycy8=') + '%s' % optyear
@@ -2318,11 +2328,11 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
             return
-
+        # sanity check before processing.
         if "No statistics available." in html:
             irc.reply("Sorry, no statistics found on the page for: %s" % optplayer.title())
             return
-
+        # process html.
         soup = BeautifulSoup(html)
 
         currentGame, previousGame = True, True  # booleans for below.
@@ -2344,7 +2354,7 @@ class NFL(callbacks.Plugin):
         header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
         row = table.findAll('tr')[1].findAll('td')[1:]
 
-        output = string.join([ircutils.bold(each.getText()) + ": " + row[i].getText() for i,each in enumerate(header)], " | ")
+        output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
         if gameTime:
             irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(optplayer.title()), output, gameTime.getText(), gameTimeSpan.getText()))
         else:
