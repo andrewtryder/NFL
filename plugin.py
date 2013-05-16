@@ -799,6 +799,9 @@ class NFL(callbacks.Plugin):
         # process html
         soup = BeautifulSoup(html)
         h1 = soup.find('h1')
+        if not soup.find('table', attrs={'id':'pro_bowl'}):  # check to make sure we have probowlers.
+            irc.reply("ERROR: I could not find any Pro Bowlers for {0}. Perhaps you specified this year where none have been selected yet?".format(optyear))
+            return
         table = soup.find('table', attrs={'id':'pro_bowl'}).find('tbody')
         rows = table.findAll('tr', attrs={'class':''})
         # setup containers
