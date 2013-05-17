@@ -121,13 +121,11 @@ class NFL(callbacks.Plugin):
         except ValueError:
             return False
 
-    def _httpget(self, url, h=None, d=None):
-        """General HTTP resource fetcher. Supports b64encoded urls."""
+    def _httpget(self, url, h=None, d=None, l=True):
+        """General HTTP resource fetcher. Pass headers via h, data via d, and to log via l."""
 
-        if not url.startswith('http://'):
-            url = self._b64decode(url)
-
-        self.log.info(url)
+        if self.registryValue('logURLs') and l:
+            self.log.info(url)
 
         try:
             if h and d:
@@ -136,7 +134,7 @@ class NFL(callbacks.Plugin):
                 page = utils.web.getUrl(url)
             return page
         except utils.web.Error as e:
-            self.log.error("I could not open {0} error: {1}".format(url,e))
+            self.log.error("ERROR opening {0} message: {1}".format(url, e))
             return None
 
     def _remove_accents(self, data):
@@ -176,15 +174,69 @@ class NFL(callbacks.Plugin):
         try:
             posturi = "https://www.googleapis.com/urlshortener/v1/url"
             data = json.dumps({'longUrl' : url})
-            request = urllib2.Request(posturi, data, {'Content-Type':'application/json'})
-            response = urllib2.urlopen(request)
-            return json.loads(response.read())['id']
+            request = self._httpget(posturi, h={'Content-Type':'application/json'}, d=data, l=False)
+            return json.loads(request)['id']
         except:
             return url
 
-    ###############################
-    # INTERNAL DATABASE FUNCTIONS #
-    ###############################
+    ####################################
+    # INTERNAL TEAM DATABASE FUNCTIONS #
+    ####################################
+
+    def _allteams(self, conf=None, div=None):
+        """Return a list of all valid teams (abbr)."""
+
+        with sqlite3.connect(self._nfldb) as conn:
+            cursor = conn.cursor()
+            if conf and not div:
+                cursor.execute("SELECT team FROM nfl WHERE conf=?", (conf,))
+            elif conf and div:
+                cursor.execute("SELECT team FROM nfl WHERE conf=? AND div=?", (conf, div,))
+            else:
+                cursor.execute("SELECT team FROM nfl")
+        # join all into list.
+        teamlist = [item[0] for item in cursor.fetchall()]
+        # return.
+        return " | ".join(sorted(teamlist))
+
+    def _validteams(self, optteam):
+        """Takes optteam as input function and sees if it is a valid team.
+        Aliases are supported via nflteamaliases table.
+        Returns a 1 upon error (no team name nor alias found.)
+        Returns the team's 3-letter (ex: NE or ARI) if successful."""
+
+        with sqlite3.connect(self._nfldb) as conn:
+            cursor = conn.cursor()
+            query = "SELECT team FROM nflteamaliases WHERE teamalias LIKE ?"  # check aliases first.
+            cursor.execute(query, ('%'+self._sanitizeName(optteam)+'%',))
+            aliasrow = cursor.fetchone()
+            if not aliasrow:  # no alias found so we're gonna check team
+                query = "SELECT team FROM nfl WHERE team=?"
+                cursor.execute(query, (optteam.upper(),)) # standard lookup. go upper. nyj->NYJ.
+                teamrow = cursor.fetchone()
+                if not teamrow:  # team is not found. Error.
+                    returnval = 1  # checked in each command.
+                else: # ex: NYJ
+                    returnval = str(teamrow[0])
+            else:  # alias turns into team like patriots->NE.
+                returnval = str(aliasrow[0])
+        # return time.
+        return returnval
+
+    def _translateTeam(self, db, column, optteam):
+        """Translates optteam (validated via _validteams) into proper string using database column."""
+
+        with sqlite3.connect(self._nfldb) as conn:
+            cursor = conn.cursor()
+            query = "SELECT %s FROM nfl WHERE %s='%s'" % (db, column, optteam)
+            cursor.execute(query)
+            row = cursor.fetchone()
+        # return time.
+        return (str(row[0]))
+
+    ######################################
+    # INTERNAL PLAYER DATABASE FUNCTIONS #
+    ######################################
 
     def _sanitizeName(self, name):
         """ Sanitize name. """
@@ -269,57 +321,6 @@ class NFL(callbacks.Plugin):
         # close db and return the id.
         #db.close()
         return optid
-
-    def _allteams(self, conf=None, div=None):
-        """Return a list of all valid teams (abbr)."""
-
-        with sqlite3.connect(self._nfldb) as conn:
-            cursor = conn.cursor()
-            if conf and not div:
-                cursor.execute("SELECT team FROM nfl WHERE conf=?", (conf,))
-            elif conf and div:
-                cursor.execute("SELECT team FROM nfl WHERE conf=? AND div=?", (conf, div,))
-            else:
-                cursor.execute("SELECT team FROM nfl")
-        # join all into list.
-        teamlist = [item[0] for item in cursor.fetchall()]
-        # return.
-        return " | ".join(sorted(teamlist))
-
-    def _validteams(self, optteam):
-        """Takes optteam as input function and sees if it is a valid team.
-        Aliases are supported via nflteamaliases table.
-        Returns a 1 upon error (no team name nor alias found.)
-        Returns the team's 3-letter (ex: NE or ARI) if successful."""
-
-        with sqlite3.connect(self._nfldb) as conn:
-            cursor = conn.cursor()
-            query = "SELECT team FROM nflteamaliases WHERE teamalias LIKE ?"  # check aliases first.
-            cursor.execute(query, ('%'+self._sanitizeName(optteam)+'%',))
-            aliasrow = cursor.fetchone()
-            if not aliasrow:  # no alias found so we're gonna check team
-                query = "SELECT team FROM nfl WHERE team=?"
-                cursor.execute(query, (optteam.upper(),)) # standard lookup. go upper. nyj->NYJ.
-                teamrow = cursor.fetchone()
-                if not teamrow:  # team is not found. Error.
-                    returnval = 1  # checked in each command.
-                else: # ex: NYJ
-                    returnval = str(teamrow[0])
-            else:  # alias turns into team like patriots->NE.
-                returnval = str(aliasrow[0])
-        # return time.
-        return returnval
-
-    def _translateTeam(self, db, column, optteam):
-        """Translates optteam (validated via _validteams) into proper string using database column."""
-
-        with sqlite3.connect(self._nfldb) as conn:
-            cursor = conn.cursor()
-            query = "SELECT %s FROM nfl WHERE %s='%s'" % (db, column, optteam)
-            cursor.execute(query)
-            row = cursor.fetchone()
-        # return time.
-        return (str(row[0]))
 
     def _eidlookup(self, eid):
         """Returns a playername for a specific EID."""

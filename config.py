@@ -21,7 +21,6 @@ def configure(advanced):
 
 
 NFL = conf.registerPlugin('NFL')
-#conf.registerGlobalValue(NFL, 'dbLocation', registry.String(os.path.abspath(os.path.dirname(__file__)) + '/db/nfl.db', """Absolute path for nfl.db sqlite3 database file location."""))
-#conf.registerGlobalValue(NFL, 'nflPlayersDb', registry.String(os.path.abspath(os.path.dirname(__file__)) + '/db/nfl_players.db', """Absolute path for nflplayers.db sqlite3 database file location."""))
+conf.registerGlobalValue(NFL, 'logURLs', registry.Boolean(True, """Should we log all URL calls?"""))
 
 # vim:set shiftwidth=4 tabstop=4 expandtab textwidth=250:
