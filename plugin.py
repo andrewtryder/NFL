@@ -6,7 +6,7 @@
 
 # my libs.
 from BeautifulSoup import BeautifulSoup
-import urllib2
+import inspect
 import re
 import collections
 import string
@@ -335,33 +335,59 @@ class NFL(callbacks.Plugin):
         else:
             return None
 
-    ########################################
-    # ALIAS AND PLAYER DB PUBLIC FUNCTIONS #
-    ########################################
+    def _addplayer(self, opteid, optrid, optplayer):
+        """<eid> <rid> <player name> adds a new player into the database."""
 
-    def nflplayeradd(self, irc, msg, args, opteid, optrid, optplayer):
-        """
-        """
+        if not opteid.isdigit() and optrid.isdigit():  # initial check on digit adds.
+            return(1, "ERROR: eid and rid must be digits")
+        # lets make sure we don't have someone in there already.
+        playername = self._eidlookup(opteid)
+        if playername:
+            return(1, "ERROR: I already have player '{0}' in the database under eid '{1}'".format(playername, opteid))
+            return
+        # everything looks good so lets prep to add.  # 2330|1163|tom brady|tom|brady|TM||PRT|
+        optplayer = self._sanitizeName(optplayer)  # sanitize.
+        namesplit = optplayer.split()  # now we have to split the optplayer into first, last.
+        fndm = doublemetaphone.dm(unicode(namesplit[0]))  # dm first.
+        lndm = doublemetaphone.dm(unicode(namesplit[1]))  # dm last.
+        # connect to the db and finally add.
+        with sqlite3.connect(self._playersdb) as db:
+            try:
+                cursor = db.cursor()
+                cursor.execute("INSERT INTO players VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (opteid, optrid, optplayer, namesplit[0], namesplit[1], fndm[0], fndm[1], lndm[0], lndm[1]))
+                db.commit()
+                return(0, "I have successfully added player {0}({1}).".format(optplayer, opteid))
+            except sqlite3.Error, e:
+                return(1, "ERROR: I cannot add {0}. Error: '{1}'".format(optplayer, e))
 
-        pass
+    def _delplayer(self, opteid):
+        """<eid> Deletes a player from the database."""
 
-    nflplayeradd = wrap(nflplayeradd, [('checkCapability', 'admin'), ('int'), ('int'), ('text')])
+        if not opteid.isdigit():
+            return(1, "ERROR: you must specify a player's EID to delete.")
+        else:  # lookup to see if the eid is valid.
+            playername = self._eidlookup(opteid)
+            if not playername:
+                return(1, "ERROR: I did not find an entry in the db with EID '{0}'.".format(opteid))
+        # connect to the db and delete if valid.
+        with sqlite3.connect(self._playersdb) as db:
+            try:
+                cursor = db.cursor()
+                cursor.execute("DELETE FROM players WHERE eid=?", (opteid,))
+                cursor.execute("DELETE FROM aliases WHERE id=?", (opteid,))
+                db.commit()
+                return(0, "I have successfully deleted player {0}({1}) and their aliases.".format(playername, opteid))
+            except sqlite3.Error, e:
+                return(1, "ERROR: I cannot delete EID: {0}. Error: '{1}'".format(opteid, e))
 
-    def nflplayerdel(self, irc, msg, args, opteid):
-        """<eID>
-        Delete a specific player from the database. Must specify their eID.
-        Ex: 2331
-        """
+    #####################################
+    # INTERNAL ALIAS DATABASE FUNCTIONS #
+    #####################################
 
-        pass
+    def _addalias(self, optid, optalias):
+        """<eid> <alias> Add a player alias. Ex: 2330 gisele"""
 
-    nflplayerdel = wrap(nflplayerdel, [('checkCapability', 'admin'), ('int')])
-
-    def nflplayeraddalias(self, irc, msg, args, optid, optalias):
-        """<eid> <alias>
-        Add a player alias.
-        Ex: 2330 gisele
-        """
+        # validate optid (eid)
 
         optalias = optalias.lower()  # sanitize name so it conforms.
         with sqlite3.connect(self._playersdb) as db:
@@ -370,17 +396,12 @@ class NFL(callbacks.Plugin):
                 cursor.execute('PRAGMA foreign_keys=ON')
                 cursor.execute("INSERT INTO aliases VALUES (?, ?)", (optid, optalias,))
                 db.commit()
-                irc.reply("I have successfully added {0} as an alias to '{1} ({2})'.".format(optalias, self._eidlookup(optid), optid))
+                return (0, "I have successfully added '{0}' as an alias to '{1} ({2})'.".format(optalias, self._eidlookup(optid), optid))
             except sqlite3.Error, e:  # more descriptive error messages? (column name is not unique, foreign key constraint failed)
-                irc.reply("ERROR: I cannot insert alias: {0}".format(e)) #(e.args[0]))
+                return(1, "ERROR: I cannot insert alias: {0}".format(e)) #(e.args[0]))
 
-    nflplayeraddalias = wrap(nflplayeraddalias, [('checkCapability', 'admin'), ('int'), ('text')])
-
-    def nflplayerdelalias(self, irc, msg, args, optalias):
-        """<player alias>
-        Delete a player alias.
-        Ex: gisele
-        """
+    def _delalias(self, optalias):
+        """<player alias> Delete a player alias. Ex: gisele."""
 
         optalias = optalias.lower()  # sanitize name.
         with sqlite3.connect(self._playersdb) as db:
@@ -388,28 +409,21 @@ class NFL(callbacks.Plugin):
             cursor.execute("SELECT id FROM aliases WHERE name=?", (optalias,))
             rowid = cursor.fetchone()
             if not rowid:
-                irc.reply("ERROR: I do not have any aliases under '{0}'.".format(optalias))
-                return
+                return(1, "ERROR: I do not have any aliases under '{0}'.".format(optalias))
             else:
                 cursor.execute("DELETE FROM aliases WHERE name=?", (optalias,))
                 db.commit()
-                irc.reply("I have successfully deleted the player alias '{0}' from '{1} ({2})'.".format(optalias, self._eidlookup(rowid[0]), rowid[0]))
+                return(0, "I have successfully deleted the player alias '{0}' from: {1} ({2}).".format(optalias, self._eidlookup(rowid[0]), rowid[0]))
 
-    nflplayerdelalias = wrap(nflplayerdelalias, [('checkCapability', 'admin'), ('text')])
-
-    def nflplayeralias(self, irc, msg, args, optplayer):
-        """<player|eid>
-        Fetches aliases for player. Specify the player name or their eid.
-        Ex: Tom Brady or 2330.
-        """
+    def _listalias(self, optplayer):
+        """<player|eid> Fetches aliases for player. Specify the player name or their eid. Ex: Tom Brady or 2330."""
 
         if optplayer.isdigit():  # no need to lookup if we have the EID.
-            pass
+            lookupid = optplayer
         else:
             lookupid = self._playerLookup('eid', optplayer)
             if lookupid == "0":
-                irc.reply("ERROR: I did not find any NFL player in the DB matching: {0}".format(optplayer))
-                return
+                return(1, "ERROR: I did not find any NFL player in the DB matching: {0}".format(optplayer))
 
         with sqlite3.connect(self._playersdb) as db:
             cursor = db.cursor()
@@ -417,13 +431,51 @@ class NFL(callbacks.Plugin):
             rows = cursor.fetchall()
 
         if len(rows) > 0:
-            output = ' | '.join([item[0] for item in rows])
+            return(0, "{0}({1}) aliases: {2}".format(optplayer, lookupid, " | ".join([item[0] for item in rows])))
         else:
-            output = "None."
+            return(0, "I did not find any aliases for: {0}({1}".format(optplayer, lookupid))
 
-        irc.reply("{0}({1}) aliases: {2}".format(optplayer, lookupid, output))
+    #######################################
+    # ALIAS AND PLAYER DB PUBLIC FUNCTION #
+    #######################################
 
-    nflplayeralias = wrap(nflplayeralias, [('text')])
+    def nfldb(self, irc, msg, args, optinput):
+        """[help]
+        Central database management for teams and players.
+        Issue with help for an explaination. Must be admin to run.
+        """
+
+        commands = {
+                    'addplayer':'adds a new player into the nfl database.',
+                    'delplayer':'deletes a player from the nfl database.',
+                    'addalias':'adds a new alias to a player in the db.',
+                    'delalias':'deletes an alias to a player in the db.',
+                    'listalias':'lists all aliases for a player in the db.'
+                   }
+
+        iarg = optinput.split()  # arguments are split by spaces.
+        # first argument is the command.
+        command = iarg[0].lower()  # lower command to match.
+        if command == "addalias":
+            commandresp = self._addalias(iarg[1], " ".join(iarg[2:]))
+        elif command == "delalias":
+            commandresp = self._delalias(" ".join(iarg[1:]))
+        elif command == "listalias":
+            commandresp = self._listalias(" ".join(iarg[1:]))
+        elif command == "delplayer":
+            commandresp = self._delplayer(iarg[1])
+        elif command == "addplayer":
+            commandresp = self._addplayer(iarg[1], iarg[2], " ".join(iarg[3:]))
+        else:  # if invalid, 'help', etc.
+            irc.reply("ERROR: Valid nfldb commands are: {0}".format(" | ".join(sorted(commands.keys()))))
+            return
+        # check return value and print.
+        if commandresp[0] == 0:  # success.
+            irc.reply("{0}".format(commandresp[1]))
+        else:  # 1, error.
+            irc.reply("{0}".format(commandresp[1]))
+
+    nfldb = wrap(nfldb, [('checkCapability', 'admin'), ('text')])
 
     ####################
     # PUBLIC FUNCTIONS #
@@ -433,7 +485,7 @@ class NFL(callbacks.Plugin):
         """[conference] [division]
         Display a list of NFL teams for input.
         Optional: use AFC or NFC for conference.
-        Optionally, it can also display specific divisions with North, South, East or West.
+        It can also display specific divisions with North, South, East or West.
         Ex: nflteams or nflteams AFC or nflteams AFC East.
         """
 
