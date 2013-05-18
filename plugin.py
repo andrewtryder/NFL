@@ -2393,9 +2393,9 @@ class NFL(callbacks.Plugin):
 
     nflnews = wrap(nflnews)
 
-    #################################
-    # NFL PLAYER DATABASE FUNCTIONS #
-    #################################
+    ########################################
+    # NFL PLAYER DATABASE PUBLIC FUNCTIONS #
+    ########################################
 
     def nflplayers(self, irc, msg, args, optname):
         """<player>
@@ -2418,56 +2418,6 @@ class NFL(callbacks.Plugin):
             irc.reply("{0} {1} {2}".format(row[0], row[1], row[2]))
 
     nflplayers = wrap(nflplayers, [('text')])
-
-    def nflgame(self, irc, msg, args, optplayer):
-        """<player>
-        Display NFL player's game log for current/active game.
-        Ex: Eli Manning
-        """
-
-        lookupid = self._playerLookup('eid', optplayer)
-        if lookupid == "0":
-            related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-            irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
-            return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-        # sanity check before processing.
-        if "No statistics available." in html:
-            irc.reply("ERROR: No statistics found on the player page for: {0}".format(optplayer.title()))
-            return
-        # process html.
-        soup = BeautifulSoup(html)
-        currentGame, previousGame = True, True  # booleans for below.
-        h4 = soup.find('h4', text="CURRENT GAME")
-        if not h4:
-            h4 = soup.find('h4', text="PREVIOUS GAME")
-            if not h4:
-                irc.reply("I could not find game statistics for: %s. Player not playing? Also try nflgamelog command." % optplayer.title())
-                return
-            else:
-                previousGame = True
-        else:
-            currentGame = True
-
-        div = h4.findParent('div').findParent('div')
-        gameTime = False
-        table = div.find('table', attrs={'class':'tablehead'})
-        header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
-        row = table.findAll('tr')[1].findAll('td')[1:]
-        # now output.
-        output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
-        if gameTime:
-            irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(optplayer.title()), output, gameTime.getText(), gameTimeSpan.getText()))
-        else:
-            irc.reply("{0} :: {1}".format(self._red(optplayer.title()), output))
-
-    nflgame = wrap(nflgame, [('text')])
 
     def nflplayernews(self, irc, msg, args, optplayer):
         """<player>
@@ -2621,6 +2571,56 @@ class NFL(callbacks.Plugin):
         irc.reply("{0} :: {1}".format(self._red(h1), contract))
 
     nflcontract = wrap(nflcontract, [('text')])
+
+    def nflgame(self, irc, msg, args, optplayer):
+        """<player>
+        Display NFL player's game log for current/active game.
+        Ex: Eli Manning
+        """
+
+        lookupid = self._playerLookup('eid', optplayer)
+        if lookupid == "0":
+            related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
+            irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+            return
+        # build and fetch url.
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+            return
+        # sanity check before processing.
+        if "No statistics available." in html:
+            irc.reply("ERROR: No statistics found on the player page for: {0}".format(optplayer.title()))
+            return
+        # process html.
+        soup = BeautifulSoup(html)
+        currentGame, previousGame = True, True  # booleans for below.
+        h4 = soup.find('h4', text="CURRENT GAME")
+        if not h4:
+            h4 = soup.find('h4', text="PREVIOUS GAME")
+            if not h4:
+                irc.reply("I could not find game statistics for: %s. Player not playing? Also try nflgamelog command." % optplayer.title())
+                return
+            else:
+                previousGame = True
+        else:
+            currentGame = True
+
+        div = h4.findParent('div').findParent('div')
+        gameTime = False
+        table = div.find('table', attrs={'class':'tablehead'})
+        header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
+        row = table.findAll('tr')[1].findAll('td')[1:]
+        # now output.
+        output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
+        if gameTime:
+            irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(optplayer.title()), output, gameTime.getText(), gameTimeSpan.getText()))
+        else:
+            irc.reply("{0} :: {1}".format(self._red(optplayer.title()), output))
+
+    nflgame = wrap(nflgame, [('text')])
 
     def nflcareerstats(self, irc, msg, args, optplayer):
         """<player>
