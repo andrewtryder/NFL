@@ -435,6 +435,19 @@ class NFL(callbacks.Plugin):
         else:
             return(0, "I did not find any aliases for: {0}({1}".format(optplayer, lookupid))
 
+    def _dbstats(self):
+        """Return stats about the database."""
+
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT Count() FROM players")
+            numofplayers = cursor.fetchone()[0]
+            cursor.execute("SELECT Count() FROM aliases")
+            numofaliases = cursor.fetchone()[0]
+
+        return(0, "NFLDB: I know about {0} players and {1} aliases.".format(numofplayers, numofaliases))
+
+
     #######################################
     # ALIAS AND PLAYER DB PUBLIC FUNCTION #
     #######################################
@@ -450,7 +463,8 @@ class NFL(callbacks.Plugin):
                     'delplayer':'deletes a player from the nfl database.',
                     'addalias':'adds a new alias to a player in the db.',
                     'delalias':'deletes an alias to a player in the db.',
-                    'listalias':'lists all aliases for a player in the db.'
+                    'listalias':'lists all aliases for a player in the db.',
+                    'stats':'show stats about the database.'
                    }
 
         iarg = optinput.split()  # arguments are split by spaces.
@@ -466,6 +480,8 @@ class NFL(callbacks.Plugin):
             commandresp = self._delplayer(iarg[1])
         elif command == "addplayer":
             commandresp = self._addplayer(iarg[1], iarg[2], " ".join(iarg[3:]))
+        elif command == "stats":
+            commandresp = self._dbstats()
         else:  # if invalid, 'help', etc.
             irc.reply("ERROR: Valid nfldb commands are: {0}".format(" | ".join(sorted(commands.keys()))))
             return
