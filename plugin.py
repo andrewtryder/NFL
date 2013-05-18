@@ -706,17 +706,19 @@ class NFL(callbacks.Plugin):
             wins = tds[1].getText()
             loss = tds[2].getText()
             ties = tds[3].getText()
+            total = wins + loss + ties
             perc = tds[4].getText()
             pwins = tds[7].getText()
             ploss = tds[8].getText()
-            head2head[team] = ":: REG SEASON {0}-{1}-{2} ({3}) :: PLAYOFFS {4}-{5}".format(wins, loss, ties, perc, pwins, ploss)
+            ptotal = pwins + ploss
+            head2head[team] = ":: REG SEASON({0}) {1}-{2}-{3} ({4}) :: PLAYOFFS({5}) {6}-{7}".format(total, wins, loss, ties, perc, ptotal,  pwins, ploss)
         # output time.
         output = head2head.get(optopp)
         if not output:
             irc.reply("ERROR: For some reason, I have no head-to-head record between {0} and {1}".format(optteam, optopp))
             return
         else:
-            irc.reply("{0} vs {1} :: {2}".format(self._red(optteam), self._red(optopp), output))
+            irc.reply("{0} vs {1} {2}".format(self._red(optteam), self._red(optopp), output))
 
     nflhead2head = wrap(nflhead2head, [('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
 
@@ -2364,31 +2366,30 @@ class NFL(callbacks.Plugin):
 
     def nflnews(self, irc, msg, args):
         """
-        Display the latest headlines from nfl.com
+        Display the latest headlines from nfl.com.
         """
 
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsX25ld3NMaXN0Lmpz')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # try and process json.
         try:
             jsondata = json.loads(html)['content']
         except:
-            irc.reply("Failed to parse article json from: %s" % url)
+            irc.reply("ERROR: Failed to parse article json from: {0}".format(url))
             return
-
+        # iterate through and output.
         for article in jsondata[0:6]:
             title = article.get('title', None)
             # desc = article.get('description', None)
             link = article.get('linkURL', None)
             # date = article.get('date_ago', None)
-
             if title and link:
-                output = "{0} - {1}".format(self._bold(title), self._shortenUrl(link))
-                irc.reply(output)
+                irc.reply("{0} - {1}".format(self._bold(title), self._shortenUrl(link)))
 
     nflnews = wrap(nflnews)
 
@@ -2399,20 +2400,19 @@ class NFL(callbacks.Plugin):
     def nflplayers(self, irc, msg, args, optname):
         """<player>
         Search and find NFL players. Must enter exact/approx name since no fuzzy matching is done here.
-        Ex: tom brady
+        Ex: Tom Brady
         """
 
-        optplayer = self._sanitizeName(optname)  # sanitize optname
-        optplayer = optplayer.replace(' ','%')  # replace spaces with % to help query.
-        db = sqlite3.connect(self._playersdb)
-        cursor = db.cursor()
-        cursor.execute("select eid, rid, fullname from players WHERE fullname LIKE ?", ('%'+optplayer+'%',))
-        rows = cursor.fetchall()
-
+        optplayer = self._sanitizeName(optname)  # sanitize optname.
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT eid, rid, fullname FROM players WHERE fullname LIKE ?", ('%'+optplayer.replace(' ','%')+'%',))
+            rows = cursor.fetchall()
+        # check if we found anything.
         if len(rows) < 1:
             irc.reply("ERROR: Sorry, I did not find any players matching {0}".format(optname))
             return
-
+        # otherwise, output.
         irc.reply("{0} | {1} | {2}".format("EID","RID","NAME"))
         for row in rows:
             irc.reply("{0} {1} {2}".format(row[0], row[1], row[2]))
@@ -2428,9 +2428,9 @@ class NFL(callbacks.Plugin):
         lookupid = self._playerLookup('eid', optplayer)
         if lookupid == "0":
             related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-            irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+            irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
             return
-
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
         html = self._httpget(url)
         if not html:
@@ -2439,11 +2439,10 @@ class NFL(callbacks.Plugin):
             return
         # sanity check before processing.
         if "No statistics available." in html:
-            irc.reply("Sorry, no statistics found on the page for: %s" % optplayer.title())
+            irc.reply("ERROR: No statistics found on the player page for: {0}".format(optplayer.title()))
             return
         # process html.
         soup = BeautifulSoup(html)
-
         currentGame, previousGame = True, True  # booleans for below.
         h4 = soup.find('h4', text="CURRENT GAME")
         if not h4:
@@ -2458,11 +2457,10 @@ class NFL(callbacks.Plugin):
 
         div = h4.findParent('div').findParent('div')
         gameTime = False
-
         table = div.find('table', attrs={'class':'tablehead'})
         header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
         row = table.findAll('tr')[1].findAll('td')[1:]
-
+        # now output.
         output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
         if gameTime:
             irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(optplayer.title()), output, gameTime.getText(), gameTimeSpan.getText()))
@@ -2508,32 +2506,32 @@ class NFL(callbacks.Plugin):
                     playerNews = self._remove_accents(playerNews.getText())
                 else:
                     playerNews = "No news found for player."
-        else:
+        else:  # rworld.
             lookupid = self._playerLookup('rid', optplayer)
             if lookupid == "0":
                 related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
                 return
-
+            # build and fetch url.
             url = self._b64decode('aHR0cDovL2Rldi5yb3Rvd29ybGQuY29tL3NlcnZpY2VzL21vYmlsZS5hc214L0dldEpTT05TaW5nbGVQbGF5ZXJOZXdzP3Nwb3J0PU5GTA==') + '&playerid=%s' % lookupid
             html = self._httpget(url)
             if not html:
                 irc.reply("ERROR: Failed to fetch {0}.".format(url))
                 self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
                 return
-
+            # parse json
             jsondata = json.loads(html)
-
-            if len(jsondata) < 1:
+            # check to make sure we have news and build output string.
+            if len(jsondata) < 1:  # generic error here.
                 playerNews = "I did not find any news for player."
-            else:
+            else:  # we did find some playernews.
                 jsondata = jsondata[0]
                 playerName = jsondata['FirstName'] + " " + jsondata['LastName']
                 timestamp = jsondata.get('TimeStamp', None) # RawTimeStamp
                 headline = jsondata.get('Headline', None)
                 impact = jsondata.get('Impact', None)
                 news = jsondata.get('News', None)
-                # now construct playernews
+                # now construct playernews string for output.
                 playerNews = ""
                 if timestamp: playerNews += "{0}".format(timestamp)
                 if headline: playerNews += " {0}".format(self._remove_accents(headline))
@@ -2552,26 +2550,27 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
+
         lookupid = self._playerLookup('eid', optplayer)
         if lookupid == "0":
             related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-            irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+            irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
             return
-
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcmluZm8=') + '?playerId=%s&wjb=' % lookupid
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
             return
-
+        # process html.
         soup = BeautifulSoup(html)
         team = soup.find('td', attrs={'class': 'teamHeader'}).find('b')
-        playerName = soup.find('div', attrs={'class': 'sub bold'})
+        playerName = soup.find('div', attrs={'class': 'sub bold'}).getText()
         divs = soup.findAll('div', attrs={'class': re.compile('^ind tL$|^ind alt$|^ind$')})
-
+        # container to put all in.
         append_list = []
-
+        # each row is a stat.
         for div in divs:
             bold = div.find('b')
             if bold:
@@ -2579,10 +2578,9 @@ class NFL(callbacks.Plugin):
                 bold.extract()
                 value = div
                 append_list.append("{0}: {1}".format(self._ul(key.getText()), value.getText()))
-
+        # output time.
         descstring = " | ".join([item for item in append_list])
-        output = "{0} :: {1} :: {2}".format(self._red(playerName.getText()),self._bold(team.getText()), descstring)
-
+        output = "{0} :: {1} :: {2}".format(self._red(playerName), self._bold(team.getText()), descstring)
         irc.reply(output)
 
     nflinfo = wrap(nflinfo, [('text')])
@@ -2593,34 +2591,33 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
-        lookupid = self._playerLookup('rid', optplayer)
-        if lookupid == "0":
-            related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-            irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
-            return
-        elif not lookupid.isdigit():
-            irc.reply("ERROR: no RID found in DB for: {0}".format(optplayer))
-            return
-
+        if optplayer.isdigit():  # we're using a direct rid to lookup a contract.
+            lookupid = optplayer
+        else:  # lookup the player by name.
+            lookupid = self._playerLookup('rid', optplayer)
+            if lookupid == "0":  # player not found
+                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
+                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+                return
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5yb3Rvd29ybGQuY29tL3BsYXllci9uZmwv') + '%s/' % lookupid
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
             return
-
+        # process HTML.
         soup = BeautifulSoup(html)
         pn = soup.find('div', attrs={'class':'playercard', 'style':'display:none;', 'id': re.compile('^cont_.*')})
-
-        if not pn:
-            irc.reply("ERROR: No contract found for: %s" % optplayer)
+        if not pn:  # check and make sure we have a contract.
+            irc.reply("ERROR: No contract found for: {0}".format(optplayer))
             return
-
+        # format/parse html.
         h1 = soup.find('h1').getText().split('|',1)[0].strip()
         p1 = pn.find('div', attrs={'class': 'report'}).getText()
         contract = re.sub('<[^<]+?>', '', p1).strip()
         contract = utils.str.normalizeWhitespace(contract)  # kill double spacing.
-
+        # output
         irc.reply("{0} :: {1}".format(self._red(h1), contract))
 
     nflcontract = wrap(nflcontract, [('text')])
@@ -2757,7 +2754,7 @@ class NFL(callbacks.Plugin):
             return
 
         if "No stats available." in html:
-            irc.reply("No stats available for: %s" % optplayer)
+            irc.reply("ERROR: No stats available for: {0}".format(optplayer))
             return
 
         soup = BeautifulSoup(html)
@@ -2782,7 +2779,7 @@ class NFL(callbacks.Plugin):
         heading = headings[0].findAll('td')  # first table, first row is the heading.
         row = rows[yearindex].findAll('td')  # the year comes with the index number, which we find above.
 
-        output = ' | '.join([ircutils.bold(each.text) + ": " + row[i].text for i,each in enumerate(heading)])
+        output = ' | '.join([self._bold(each.text) + ": " + row[i].text for i, each in enumerate(heading)])
         irc.reply("{0} :: {1}".format(self._red(playername), output))
 
     nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
