@@ -113,6 +113,7 @@ INSERT INTO nflteamaliases (team, teamalias) values ('SD','chargers');
 INSERT INTO nflteamaliases (team, teamalias) values ('SF','49ers');
 INSERT INTO nflteamaliases (team, teamalias) values ('SEA','seattle');
 INSERT INTO nflteamaliases (team, teamalias) values ('SEA','seahawks');
+INSERT INTO nflteamaliases (team, teamalias) values ('SEA','seadderall');
 INSERT INTO nflteamaliases (team, teamalias) values ('STL','rams');
 INSERT INTO nflteamaliases (team, teamalias) values ('TB','buccaneers');
 INSERT INTO nflteamaliases (team, teamalias) values ('TB','bucs');
