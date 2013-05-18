@@ -665,6 +665,61 @@ class NFL(callbacks.Plugin):
 
     nflsuperbowl = wrap(nflsuperbowl, [('somethingWithoutSpaces')])
 
+    def nflhead2head(self, irc, msg, args, optteam, optopp):
+        """<team> <opp>
+        Show all-time head-to-head records for regular season and playoffs of teams.
+        Ex: NE NYJ
+        """
+
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
+            return
+        optopp = self._validteams(optopp)
+        if optopp is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
+            return
+        # make sure they're not the same.
+        if optteam == optopp:
+            irc.reply("ERROR: Teams must be different from each other.")
+            return
+        # process and fetch url.
+        lookupteam = self._translateTeam('pfrurl', 'team', optteam)
+        url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS90ZWFtcw==') + '/%s/head-to-head.htm' % lookupteam
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # work with html.
+        soup = BeautifulSoup(html)
+        table = soup.find('table', attrs={'id':'head_to_head'}).find('tbody')
+        rows = table.findAll('tr')[0:31]  # displays defunct so we limit by # of teams.
+        # dict for output.
+        head2head = collections.defaultdict(list)
+        # each row is one of the 32
+        for row in rows:
+            tds = row.findAll('td')
+            team = tds[0].find('a')['href'].split('/')[2]  # translateTeam pfrurl
+            team = self._translateTeam('team', 'pfrurl', team)
+            wins = tds[1].getText()
+            loss = tds[2].getText()
+            ties = tds[3].getText()
+            perc = tds[4].getText()
+            pwins = tds[7].getText()
+            ploss = tds[8].getText()
+            head2head[team] = ":: REG SEASON {0}-{1}-{2} ({3}) :: PLAYOFFS {4}-{5}".format(wins, loss, ties, perc, pwins, ploss)
+        # output time.
+        output = head2head.get(optopp)
+        if not output:
+            irc.reply("ERROR: For some reason, I have no head-to-head record between {0} and {1}".format(optteam, optopp))
+            return
+        else:
+            irc.reply("{0} vs {1} :: {2}".format(self._red(optteam), self._red(optopp), output))
+
+    nflhead2head = wrap(nflhead2head, [('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
+
     def nflpracticereport (self, irc, msg, args, optteam):
         """<team>
         Display most recent practice report for team.
