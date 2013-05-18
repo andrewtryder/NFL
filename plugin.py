@@ -2082,11 +2082,11 @@ class NFL(callbacks.Plugin):
             if not testdate:
                 irc.reply("ERROR: Invalid year. Must be YYYY.")
                 return
-            if not 1967 >= optyear >= datetime.datetime.now().year:
-                irc.reply("ERROR: Year must be after 1967.")
+            if not 1967 <= optyear <= datetime.datetime.now().year:
+                irc.reply("ERROR: Year must be after 1967 and before the current year.")
                 return
         if optround:
-            if not 1 < optround < 7:
+            if not 1 <= optround <= 7:
                 irc.reply("ERROR: Draft round must be between 1 and 7.")
                 return
 
@@ -2101,6 +2101,10 @@ class NFL(callbacks.Plugin):
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
+            return
+        # sanity check before we process html.
+        if "There is currently no pick data available." in html:
+            irc.reply("ERROR: I did not find any draft pick data available for that year.")
             return
         # process html.
         soup = BeautifulSoup(html)
