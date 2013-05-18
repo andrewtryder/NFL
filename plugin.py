@@ -2484,9 +2484,9 @@ class NFL(callbacks.Plugin):
                 # now construct playernews string for output.
                 playerNews = ""
                 if timestamp: playerNews += "{0}".format(timestamp)
-                if headline: playerNews += " {0}".format(self._remove_accents(headline))
-                if news: playerNews += " {0}".format(self._remove_accents(news))
-                if impact: playerNews += " {0}".format(self._remove_accents(impact))
+                if headline: playerNews += " {0}".format(headline.encode('utf-8').replace('&quot;', '"'))
+                if news: playerNews += " {0}".format(news.encode('utf-8').replace('&quot;', '"'))
+                if impact: playerNews += " {0}".format(impact.encode('utf-8').replace('&quot;', '"'))  #self._remove_accents(impact))
 
         # finally, lets output.
         output = "{0} :: {1}".format(self._red(playerName), utils.str.normalizeWhitespace(playerNews))
