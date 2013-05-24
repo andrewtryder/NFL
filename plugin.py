@@ -1530,13 +1530,13 @@ class NFL(callbacks.Plugin):
             for li in listitems:
                 team = li.findPrevious('h3')
                 team = self._translateTeam('team', 'full', team.getText())
-                coachingstaff[str(team)].append(li.getText().replace(u' –',': '))
+                coachingstaff[team].append(li.getText().replace(u' –',': '))
         # output time.
         output = coachingstaff.get(str(optteam), None)
         if not output:
             irc.reply("ERROR: Failed to find coaching staff for: {0}. Maybe something broke?".format(optteam))
         else:
-            irc.reply("{0} :: {1}".format(self._red(optteam), " | ".join([item for item in output])))
+            irc.reply("{0} :: {1}".format(self._red(optteam), " | ".join([item.encode('utf-8') for item in output])))
 
     nflcoachingstaff = wrap(nflcoachingstaff, [('somethingWithoutSpaces')])
 
