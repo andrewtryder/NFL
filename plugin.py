@@ -2238,44 +2238,52 @@ class NFL(callbacks.Plugin):
         Display the last 6 NFL Arrests from NFL Nation.
         """
 
+        # build and fetch url.
         url = self._b64decode('aHR0cDovL2FycmVzdG5hdGlvbi5jb20vY2F0ZWdvcnkvcHJvLWZvb3RiYWxsLw==')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
         lastDate = soup.findAll('span', attrs={'class': 'time'})[0]
         divs = soup.findAll('div', attrs={'class': 'entry'})
-
+        # list container for output.
         arrestlist = []
-
+        # each div is an arrest.
         for div in divs:
             title = div.find('h2').getText().encode('utf-8')
             datet = div.find('span', attrs={'class': 'time'}).getText().encode('utf-8')
             datet = self._dtFormat("%m/%d", datet, "%B %d, %Y")  # translate date.
             arrestedfor = div.find('strong', text=re.compile('Team:'))
-            if arrestedfor:
+            if arrestedfor:  # if we found strong, regex to parse it out.
                 matches = re.search(r'<strong>Team:.*?</strong>(.*?)<br />', arrestedfor.findParent('p').renderContents(), re.I| re.S| re.M)
-                if matches:
+                if matches:  # we found what we needed.
                     college = matches.group(1).replace('(NFL)','').encode('utf-8').strip()
-                else:
-                    college = "None"
-            else:
-                college = "None"
-            arrestlist.append("{0} :: {1} - {2}".format(datet, title, college))
-
-        # date math.
-        a = datetime.date.today()
-        b = datetime.datetime.strptime(str(lastDate.getText()), "%B %d, %Y")
-        b = b.date()
-        delta = b - a
+                else:  # make it easy with "No Team"
+                    college = "No team"
+            else:  # same. Make it easy with "No Team".
+                college = "No team"
+            charge = div.find('strong', text=re.compile('Charge:|Charges:'))  # find if we have charges.
+            if charge:  # if we found strong, regex to parse it out.
+                charges = re.search(r'<strong>Charge.*?</strong>(.*?)<br />', charge.findParent('p').renderContents(), re.I| re.S| re.M)
+                if charges:  # we found what we needed.
+                    charge = charges.group(1).encode('utf-8').strip()
+                else:  # something went wrong so don't add.
+                    charge = None
+            else:  # didn't find so something probably broke.
+                charge = None
+            if charge:  # if we find a charge, add it.
+                arrestlist.append("{0} :: {1} - {2} - {3}".format(datet, title, college, charge))
+            else:  # if not, don't add a charge.
+                arrestlist.append("{0} :: {1} - {2}".format(datet, title, college))
+        # now prepare to output.
+        # date math. cacls days between last arrest and today.
+        delta = datetime.datetime.strptime(str(lastDate.getText()), "%B %d, %Y").date() - datetime.date.today()
         daysSince = abs(delta.days)
-
-        # output
         irc.reply("{0} days since last NFL arrest".format(self._red(daysSince)))
-        for each in arrestlist[0:6]:
+        for each in arrestlist[0:6]:  # print the last 6.
             irc.reply(each)
 
     nflarrests = wrap(nflarrests)
