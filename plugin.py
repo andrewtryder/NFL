@@ -2183,12 +2183,8 @@ class NFL(callbacks.Plugin):
                 appendString += " ({0})".format(row.find('p', attrs={'class':'notes'}).getText())
 
             object_list.append(appendString)
-
-        # output header
-        irc.reply("{0}: ".format(self._red(h2.getText().strip())))
-        # output each round.
-        for N in self._batch(object_list, 6):
-            irc.reply(' | '.join(str(n) for n in N))
+        # output time.
+        irc.reply("{0} :: {1}".format(self._red(h2.getText().strip()), " | ".join([i for i in object_list])))
 
     nfldraft = wrap(nfldraft, [optional('int'), optional('int')])
 
