@@ -2133,19 +2133,19 @@ class NFL(callbacks.Plugin):
         Ex: nfldraft 2000 6 (Would show the 6th round of the 2000 draft)
         """
 
-        if optyear:
+        # defaults to latest year/1st round. input can change this otherwise.
+        if optyear:  # test year.
             testdate = self._validate(optyear, '%Y')
-            if not testdate:
+            if not testdate:  # invalid year.
                 irc.reply("ERROR: Invalid year. Must be YYYY.")
                 return
             if not 1967 <= optyear <= datetime.datetime.now().year:
                 irc.reply("ERROR: Year must be after 1967 and before the current year.")
                 return
-        if optround:
+        if optround:  # if round.
             if not 1 <= optround <= 7:
                 irc.reply("ERROR: Draft round must be between 1 and 7.")
                 return
-
         # construct url. add parameters depending on opts above.
         url = self._b64decode('aHR0cDovL2luc2lkZXIuZXNwbi5nby5jb20vbmZsL2RyYWZ0L3JvdW5kcw==')
         if optyear:  # add year if we have it.
@@ -2165,12 +2165,12 @@ class NFL(callbacks.Plugin):
         # process html.
         soup = BeautifulSoup(html)
         table = soup.find('table', attrs={'class':'tablehead draft-tracker'})
-        h2 = soup.find('h2')
+        h2 = soup.find('h2').getText().strip()
         rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
-
+        # container list for output.
         object_list = []
-
-        for row in rows:
+        # iterate over each row which is a pick.
+        for row in rows:  # string is constructed conditionally.
             pickNumber = row.find('p', attrs={'class':'round-number'}).getText()
             pickName = row.find('p', attrs={'class':'player-name'})
             pickTeam = row.find('p', attrs={'class':'team-name'}).getText()
@@ -2178,13 +2178,11 @@ class NFL(callbacks.Plugin):
                 appendString = "{0}. {1} - {2}".format(self._bold(pickNumber), pickName.getText(), pickTeam)
             else:  # we won't have a pick leading up to the draft.
                 appendString = "{0}. {1}".format(self._bold(pickNumber), pickTeam)
-
-            if row.find('p', attrs={'class':'notes'}):
+            if row.find('p', attrs={'class':'notes'}):  # if we have notes, add them.
                 appendString += " ({0})".format(row.find('p', attrs={'class':'notes'}).getText())
-
-            object_list.append(appendString)
+            object_list.append(appendString)  # append.
         # output time.
-        irc.reply("{0} :: {1}".format(self._red(h2.getText().strip()), " | ".join([i for i in object_list])))
+        irc.reply("{0} :: {1}".format(self._red(h2), " | ".join([i for i in object_list])))
 
     nfldraft = wrap(nfldraft, [optional('int'), optional('int')])
 
