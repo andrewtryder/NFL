@@ -3,10 +3,8 @@
 # Copyright (c) 2012-2013, spline
 # All rights reserved.
 ###
-
 # my libs.
 from BeautifulSoup import BeautifulSoup
-import inspect
 import re
 import collections
 import string
@@ -16,9 +14,8 @@ import json
 import sqlite3
 import os.path
 import unicodedata
-import base64
+from base64 import b64decode
 from operator import itemgetter
-
 # supybot libs
 import supybot.utils as utils
 from supybot.commands import *
@@ -42,6 +39,9 @@ class NFL(callbacks.Plugin):
         self.__parent.__init__(irc)
         self._nfldb = os.path.abspath(os.path.dirname(__file__)) + '/db/nfl.db'
         self._playersdb = os.path.abspath(os.path.dirname(__file__)) + '/db/nfl_players.db'
+
+    def die(self):
+        self.__parent.die()
 
     ##############
     # FORMATTING #
@@ -144,9 +144,9 @@ class NFL(callbacks.Plugin):
         return u"".join([c for c in nkfd_form if not unicodedata.combining(c)])
 
     def _b64decode(self, string):
-        """Returns base64 encoded string."""
+        """Returns a base64 decoded string."""
 
-        return base64.b64decode(string)
+        return b64decode(string)
 
     def _int_to_roman(self, i):
         """Returns a string containing the roman numeral from a number. For nflsuperbowl."""
@@ -380,6 +380,18 @@ class NFL(callbacks.Plugin):
             except sqlite3.Error, e:
                 return(1, "ERROR: I cannot delete EID: {0}. Error: '{1}'".format(opteid, e))
 
+    def _dbstats(self):
+        """Return stats about the database."""
+
+        with sqlite3.connect(self._playersdb) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT Count() FROM players")
+            numofplayers = cursor.fetchone()[0]
+            cursor.execute("SELECT Count() FROM aliases")
+            numofaliases = cursor.fetchone()[0]
+
+        return(0, "NFLDB: I know about {0} players and {1} aliases.".format(numofplayers, numofaliases))
+
     #####################################
     # INTERNAL ALIAS DATABASE FUNCTIONS #
     #####################################
@@ -434,19 +446,6 @@ class NFL(callbacks.Plugin):
             return(0, "{0}({1}) aliases: {2}".format(optplayer, lookupid, " | ".join([item[0] for item in rows])))
         else:
             return(0, "I did not find any aliases for: {0}({1}".format(optplayer, lookupid))
-
-    def _dbstats(self):
-        """Return stats about the database."""
-
-        with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT Count() FROM players")
-            numofplayers = cursor.fetchone()[0]
-            cursor.execute("SELECT Count() FROM aliases")
-            numofaliases = cursor.fetchone()[0]
-
-        return(0, "NFLDB: I know about {0} players and {1} aliases.".format(numofplayers, numofaliases))
-
 
     #######################################
     # ALIAS AND PLAYER DB PUBLIC FUNCTION #
@@ -560,7 +559,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'id':'hofers'})
         rows = table.findAll('tr', attrs={'class':''})
         # dict container for output.
@@ -584,6 +583,74 @@ class NFL(callbacks.Plugin):
 
     nflhof = wrap(nflhof, [optional('int')])
 
+    def nflseasonsummary(self, irc, msg, args, optteam, optyear):
+        """<TEAM> <YEAR>
+        Display a team's schedule with win/loss from season.
+        Ex: NE 2005 or GB 2010
+        """
+
+        # test for valid teams.
+        optteam = self._validteams(optteam)
+        if optteam is 1: # team is not found in aliases or validteams.
+            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
+            return
+        # test for valid year.
+        if not self._validate(optyear, '%Y'):
+            irc.reply("ERROR: '{0}' is an invalid year. Must input a valid year.")
+            return
+        # build and fetch url.
+        lookupteam = self._translateTeam('pfrurl', 'team', optteam)
+        url = self._b64decode('aHR0cDovL3d3dy5wcm8tZm9vdGJhbGwtcmVmZXJlbmNlLmNvbS90ZWFtcy8=') + '%s/%d.htm' % (lookupteam, optyear)
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # process html
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        title = soup.find('h1', attrs={'class':'float_left'}).getText()  # team/season title.
+        table = soup.find('table', attrs={'id':'team_gamelogs'})  # table.
+        if not table:
+            irc.reply("ERROR: I did not find a gamelog for {0} in {1}".format(optteam, optyear))
+            return
+        tbody = table.find('tbody')  # need the rows from here not elsewhere.
+        rows = tbody.findAll('tr')  # so we can just find tr.
+        # list container to put each game in.
+        nflseason = []
+        # each row is a game. there are two header rows we have conditionals for.
+        for row in rows:
+            tds = row.findAll('td')
+            if len(tds) is not 21:  # make sure its a year played. crude but works for now.
+                irc.reply("ERROR: I did not find a complete record for {0} in {1}. Season must be completed.".format(optteam, optyear))
+                return
+            week = tds[0].getText()
+            if week.isdigit():  # If we're in a non-playoff week, prefix # with W.
+                week = "W{0}".format(week)  # append W.
+            date = tds[2].getText()
+            if date == "Playoffs":  # skip this row.
+                continue
+            else:  # conv date (October 24 -> ##/##)
+                date = self._dtFormat("%m/%d", date, "%B %d")
+            result = tds[4].getText()  # W or L or T.
+            vsat = tds[7].getText()   # @ or blank.
+            if vsat != "@":  # if it's not @, we must add in vs.
+                vsat = "vs."
+            opp = tds[8].getText()
+            if opp == "Bye Week":  # skip if "Bye Week"
+                continue
+            else:  # is opp. Shorten via translateTeam.
+                try:  # try to shorten. we do this because older years have non-existent franchises.
+                    opp = self._translateTeam('team', 'full', opp)
+                except:  # pass if not found (keeps original team).
+                    pass
+            tmscore = tds[9].getText()
+            oppscore = tds[10].getText()  # below, we finally append to the list.
+            nflseason.append("{0} {1} {2} {3}{4} ({5}-{6})".format(self._red(week), date, result, self._ul(vsat), self._bold(opp), tmscore, oppscore))
+        # output time.
+        irc.reply("{0} :: {1}".format(self._blue(title), " | ".join(nflseason)))
+
+    nflseasonsummary = wrap(nflseasonsummary, [('somethingWithoutSpaces'), ('int')])
+
     def nflawards(self, irc, msg, args, optyear):
         """<year>
         Display NFL Awards for a specific year. Use a year from 1966 on to the current year.
@@ -602,7 +669,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process HTML.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if not soup.find('h2', text="Award Winners"):
             irc.reply("ERROR: Could not find NFL Awards for the {0} season. Perhaps you are asking for the current season in-progress.".format(optyear))
             return
@@ -640,7 +707,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'id':'superbowls'})
         rows = table.findAll('tr')[1:]  # first row is the header.
         # key/value dict we use for output.
@@ -693,7 +760,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # work with html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'id':'head_to_head'}).find('tbody')
         rows = table.findAll('tr')[0:31]  # displays defunct so we limit by # of teams.
         # dict for output.
@@ -741,7 +808,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # work with html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         # first, check if we have any practice reports. Offseason?
         if soup.find('div', attrs={'class':'warning'}, text="No practice report found."):
             irc.reply("ERROR: No practice reports found. Is it the offseason?")
@@ -794,7 +861,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'border':'1'})  # this is amb.
         firstrow = table.find('tr')  # our simple error check.
         h1 = firstrow.find('h1')
@@ -844,7 +911,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'class':'main'})
         tbody = table.find('tbody')
         rows = tbody.findAll('tr')
@@ -882,7 +949,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         div = soup.find('div', attrs={'id':'my-teams-table'})
         table = div.find('table', attrs={'class':'tablehead'})
         rows = table.findAll('tr', attrs={'class':re.compile('^oddrow team.*|^evenrow team.*')})
@@ -923,7 +990,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         h1 = soup.find('h1')
         if not soup.find('table', attrs={'id':'pro_bowl'}):  # check to make sure we have probowlers.
             irc.reply("ERROR: I could not find any Pro Bowlers for {0}. Perhaps you specified this year where none have been selected yet?".format(optyear))
@@ -1272,7 +1339,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         div = soup.find('div', attrs={'class':'mod-container mod-stat'})
         h3 = div.find('h3')
         statsfind = div.findAll('div', attrs={'class':re.compile('span-1.*?')})
@@ -1474,7 +1541,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         teamtitle = soup.find('title')
         tbody = soup.find('tbody')
         # list for output.
@@ -1520,7 +1587,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html from wiki.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         tables = soup.findAll('table', attrs={'style':'text-align: left;'})
         # container for output.
         coachingstaff = collections.defaultdict(list)
@@ -1565,7 +1632,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if opttype == "offense":
             h4 = soup.find('h4', text="Offensive Depth Chart")
         elif opttype == "defense":
@@ -1633,7 +1700,7 @@ class NFL(callbacks.Plugin):
             return
 
         # process html
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         tbodys = soup.findAll('tbody')[1:]  #skip search header.
 
         # setup defaultdicts for output.
@@ -1686,7 +1753,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if not soup.find('div', attrs={'id':'content_nosky'}):
             irc.reply("ERROR: Something broke on formatting.")
             return
@@ -1741,7 +1808,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if not soup.find('div', attrs={'id':'content'}):
             irc.reply("ERROR: Something broke in formatting on the NFL Draft order page.")
             return
@@ -1786,7 +1853,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if not soup.find('table', attrs={'class':'tablehead', 'cellpadding':'3'}):
             irc.reply("Failed to find table for parsing.")
             return
@@ -1838,7 +1905,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         t1 = soup.findAll('div', attrs={'class':re.compile('(^ind tL$|^ind alt$|^ind$)')})
 
         if len(t1) < 1:
@@ -1880,7 +1947,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if soup.find('div', attrs={'class': 'player'}):
             team = soup.find('div', attrs={'class': 'player'}).find('a').getText()
         else:
@@ -1931,7 +1998,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         tbody = soup.find('tbody', attrs={'id':'listbody'})
         rows = tbody.findAll('tr')
 
@@ -1969,7 +2036,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process HTML
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         datehead = soup.find('div', attrs={'class':'date floatleft'})
         table = soup.find('table', attrs={'class':'tablehead'})
         headline = table.find('tr', attrs={'class':'stathead'})
@@ -2041,7 +2108,7 @@ class NFL(callbacks.Plugin):
                 self.log.error("ERROR opening {0}".format(url))
                 return
 
-            soup = BeautifulSoup(html)
+            soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
             table = soup.find('table', attrs={'summary':'Regular Season Games'})
 
             if not table:
@@ -2093,7 +2160,7 @@ class NFL(callbacks.Plugin):
             # clean this stuff up
             html = html.replace('<![CDATA[','').replace(']]>','').replace('EDT','').replace('\xc2\xa0',' ')
 
-            soup = BeautifulSoup(html)
+            soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
             items = soup.find('channel').findAll('item')
 
             append_list = []
@@ -2163,7 +2230,7 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: I did not find any draft pick data available for that year.")
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'class':'tablehead draft-tracker'})
         h2 = soup.find('h2').getText().strip()
         rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
@@ -2198,7 +2265,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         table = soup.find('table', attrs={'border':'0'})
         tbodys = table.findAll('tbody')
         # list for output
@@ -2304,7 +2371,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         title = soup.find('div', attrs={'class': 'mod-header stathead'}).find('h4')
         table = soup.find('table', attrs={'class': 'tablehead'})
         rows = table.findAll('tr', attrs={'class': re.compile('^(odd|even)row.*')})[0:10]
@@ -2341,7 +2408,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
 
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         div = soup.find('div', attrs={'id': 'my-players-table'})
         table = div.find('table', attrs={'class': 'tablehead'})
         rows = table.findAll('tr', attrs={'class': re.compile('(odd|even)row')})
@@ -2441,7 +2508,7 @@ class NFL(callbacks.Plugin):
                 self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
                 return
 
-            soup = BeautifulSoup(html)
+            soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
             playerName = soup.find('div', attrs={'class': 'sub bold'})
             if not playerName:
                 irc.reply("I could not find any news. Did formatting change?")
@@ -2517,7 +2584,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         team = soup.find('td', attrs={'class': 'teamHeader'}).find('b')
         playerName = soup.find('div', attrs={'class': 'sub bold'}).getText()
         divs = soup.findAll('div', attrs={'class': re.compile('^ind tL$|^ind alt$|^ind$')})
@@ -2560,7 +2627,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
             return
         # process HTML.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         pn = soup.find('div', attrs={'class':'playercard', 'style':'display:none;', 'id': re.compile('^cont_.*')})
         if not pn:  # check and make sure we have a contract.
             irc.reply("ERROR: No contract found for: {0}".format(optplayer))
@@ -2598,7 +2665,7 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: No statistics found on the player page for: {0}".format(optplayer.title()))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         h4 = soup.find('h4', text="CURRENT GAME")
         if not h4:
             h4 = soup.find('h4', text="PREVIOUS GAME")
@@ -2755,7 +2822,7 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: No stats available for: {0}".format(optplayer))
             return
         # process html.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if not soup.find('a', attrs={'class':'btn-split-btn'}):  # check if player is active.
             irc.reply("ERROR: Cannot find any season stats for an inactive/unsigned player: {0}".format(optplayer))
             return
@@ -2813,7 +2880,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html. put some additional error checks in because it can be iffy.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         div = soup.find('div', attrs={'class':'mod-container mod-table mod-player-stats'})
         if not div:  # one check.
             irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
