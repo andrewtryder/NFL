@@ -275,222 +275,80 @@ class NFL(callbacks.Plugin):
 
         optname = self._sanitizeName(optname)  # first sanitize.
         with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            query = "SELECT %s FROM players WHERE eid IN (SELECT id FROM aliases WHERE name LIKE ? )" % (table)
-            cursor.execute(query, ('%'+optname+'%',))
+            cursor = db.cursor()  # first, check for an alias below.
+            query = "SELECT %s FROM players WHERE eid IN (SELECT id FROM aliases WHERE name LIKE ?)" % (table)
+            cursor.execute(query, ('%'+optname+'%',))  # wrap the alias in %.
             aliasrow = cursor.fetchone()
             if aliasrow is None:  # if no alias.
-                cursor = db.cursor()
+                cursor = db.cursor()  # go into normal player db. %first%last% search.
                 query = "SELECT %s FROM players WHERE fullname LIKE ?" % (table)
                 cursor.execute(query, ('%'+optname.replace(' ', '%')+'%',))  # wrap in % and replace space with wc.
                 row = cursor.fetchone()
-                if row is None:  # we did not find a %name%match% nor alias.
-                    namesplit = optname.split()
+                if row is None:  # we did not find a %name%match% nor alias. check dm for mispellings.
+                    namesplit = optname.split()  # clean-up function here.
                     if len(namesplit) > 1:  # we have more than one, first and last. assume 0 is first, 1 is last.
-                        fndm = doublemetaphone.dm(unicode(namesplit[0]))
-                        lndm = doublemetaphone.dm(unicode(namesplit[1]))
+                        fndm = doublemetaphone.dm(unicode(namesplit[0]))  # get our list of first-name dm.
+                        lndm = doublemetaphone.dm(unicode(namesplit[1]))  # get our list of last-name dm.
                         if lndm[1] != '':  # if we have a secondary dm code.
                             query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
-                        else:
+                        else:  # check only primary lastname dm.
                             query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
                         if fndm[1] != '': # likewise with first name.
                             query += " AND fndm1='%s' AND fndm2='%s'" % (fndm[0], fndm[1])
-                        else:
+                        else:  # only check first name primary dm.
                             query += " AND fndm1='%s'" % (fndm[0])
                     else:  # assume one name given and that we check only on the last.
                         lndm = doublemetaphone.dm(unicode(namesplit[0]))
                         if lndm[1] != '':  # secondary dm code.
                             query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
-                        else:
+                        else:  # primary dm check only.
                             query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
                     # now that we have DM query, execute.
                     cursor.execute(query)  # query constructed above.
                     row = cursor.fetchone()
-                    if row is None:  # dm failed. last chance to try. Using edit distance.
-                        names = self._similarPlayers(optname)
-                        if names[0]['dist'] < 7:  # edit distance less than seven, return.
+                    if not row:  # dm failed. last chance to try using edit distance.
+                        names = self._similarPlayers(optname)  # get a list back with similar players.
+                        if names[0]['dist'] < 7:  # sorted list. check the first. if edit distance less than seven..
                             optid = str(names[0][table])  # first one, less than seven, return eid.
                         else:  # after everything, we found nothing. Return 0
-                            optid = "0"
-                    else: # dm worked so we return.
+                            optid = None
+                    else: # dm worked so we return the id matched by dm.
                         optid = str(row[0])
-                else:  # fullname query worked so return.
+                else:  # fullname query worked so return the id matched by fullname.
                     optid = str(row[0])
-            else:  # return the id but from alias.
+            else:  # matched input via alias so we return that.
                 optid = str(aliasrow[0])
         # close db and return the id.
-        #db.close()
         return optid
 
-    def _eidlookup(self, eid):
-        """Returns a playername for a specific EID."""
+    #######################################
+    # ALIAS AND PLAYER DB PUBLIC FUNCTION #
+    #######################################
 
-        with sqlite3.connect(self._playersdb) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT fullname FROM players WHERE eid=?", (eid,))
-            row = cursor.fetchone()
-        # return time.
-        if row:
-            return (str(row[0]))
-        else:
-            return None
+    def nfldb(self, irc, msg, args):
+        """
+        Return stats about the player database.
+        """
 
-    def _addplayer(self, opteid, optrid, optplayer):
-        """<eid> <rid> <player name> adds a new player into the database."""
-
-        if not opteid.isdigit() and optrid.isdigit():  # initial check on digit adds.
-            return(1, "ERROR: eid and rid must be digits")
-        # lets make sure we don't have someone in there already.
-        playername = self._eidlookup(opteid)
-        if playername:
-            return(1, "ERROR: I already have player '{0}' in the database under eid '{1}'".format(playername, opteid))
-            return
-        # everything looks good so lets prep to add.  # 2330|1163|tom brady|tom|brady|TM||PRT|
-        optplayer = self._sanitizeName(optplayer)  # sanitize.
-        namesplit = optplayer.split()  # now we have to split the optplayer into first, last.
-        fndm = doublemetaphone.dm(unicode(namesplit[0]))  # dm first.
-        lndm = doublemetaphone.dm(unicode(namesplit[1]))  # dm last.
-        # connect to the db and finally add.
-        with sqlite3.connect(self._playersdb) as db:
-            try:
-                cursor = db.cursor()
-                cursor.execute("INSERT INTO players VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (opteid, optrid, optplayer, namesplit[0], namesplit[1], fndm[0], fndm[1], lndm[0], lndm[1]))
-                db.commit()
-                return(0, "I have successfully added player {0}({1}).".format(optplayer, opteid))
-            except sqlite3.Error, e:
-                return(1, "ERROR: I cannot add {0}. Error: '{1}'".format(optplayer, e))
-
-    def _delplayer(self, opteid):
-        """<eid> Deletes a player from the database."""
-
-        if not opteid.isdigit():
-            return(1, "ERROR: you must specify a player's EID to delete.")
-        else:  # lookup to see if the eid is valid.
-            playername = self._eidlookup(opteid)
-            if not playername:
-                return(1, "ERROR: I did not find an entry in the db with EID '{0}'.".format(opteid))
-        # connect to the db and delete if valid.
-        with sqlite3.connect(self._playersdb) as db:
-            try:
-                cursor = db.cursor()
-                cursor.execute("DELETE FROM players WHERE eid=?", (opteid,))
-                cursor.execute("DELETE FROM aliases WHERE id=?", (opteid,))
-                db.commit()
-                return(0, "I have successfully deleted player {0}({1}) and their aliases.".format(playername, opteid))
-            except sqlite3.Error, e:
-                return(1, "ERROR: I cannot delete EID: {0}. Error: '{1}'".format(opteid, e))
-
-    def _dbstats(self):
-        """Return stats about the database."""
-
+        # playerdb query.
         with sqlite3.connect(self._playersdb) as db:
             cursor = db.cursor()
             cursor.execute("SELECT Count() FROM players")
             numofplayers = cursor.fetchone()[0]
             cursor.execute("SELECT Count() FROM aliases")
             numofaliases = cursor.fetchone()[0]
-
-        return(0, "NFLDB: I know about {0} players and {1} aliases.".format(numofplayers, numofaliases))
-
-    #####################################
-    # INTERNAL ALIAS DATABASE FUNCTIONS #
-    #####################################
-
-    def _addalias(self, optid, optalias):
-        """<eid> <alias> Add a player alias. Ex: 2330 gisele"""
-
-        # validate optid (eid)
-
-        optalias = optalias.lower()  # sanitize name so it conforms.
-        with sqlite3.connect(self._playersdb) as db:
+        # teamdb query.
+        with sqlite3.connect(self._nfldb) as db:
             cursor = db.cursor()
-            try:
-                cursor.execute('PRAGMA foreign_keys=ON')
-                cursor.execute("INSERT INTO aliases VALUES (?, ?)", (optid, optalias,))
-                db.commit()
-                return (0, "I have successfully added '{0}' as an alias to '{1} ({2})'.".format(optalias, self._eidlookup(optid), optid))
-            except sqlite3.Error, e:  # more descriptive error messages? (column name is not unique, foreign key constraint failed)
-                return(1, "ERROR: I cannot insert alias: {0}".format(e)) #(e.args[0]))
+            cursor.execute("SELECT Count() FROM nfl")
+            numofteams = cursor.fetchone()[0]
+            cursor.execute("SELECT Count() FROM nflteamaliases")
+            numofteamaliases = cursor.fetchone()[0]
+        # print.
+        irc.reply("NFLDB: I know about {0} NFL players, {1} player aliases, {2} teams and {3} team aliases.".format(\
+            numofplayers, numofaliases, numofteams, numofteamaliases))
 
-    def _delalias(self, optalias):
-        """<player alias> Delete a player alias. Ex: gisele."""
-
-        optalias = optalias.lower()  # sanitize name.
-        with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT id FROM aliases WHERE name=?", (optalias,))
-            rowid = cursor.fetchone()
-            if not rowid:
-                return(1, "ERROR: I do not have any aliases under '{0}'.".format(optalias))
-            else:
-                cursor.execute("DELETE FROM aliases WHERE name=?", (optalias,))
-                db.commit()
-                return(0, "I have successfully deleted the player alias '{0}' from: {1} ({2}).".format(optalias, self._eidlookup(rowid[0]), rowid[0]))
-
-    def _listalias(self, optplayer):
-        """<player|eid> Fetches aliases for player. Specify the player name or their eid. Ex: Tom Brady or 2330."""
-
-        if optplayer.isdigit():  # no need to lookup if we have the EID.
-            lookupid = optplayer
-        else:
-            lookupid = self._playerLookup('eid', optplayer)
-            if lookupid == "0":
-                return(1, "ERROR: I did not find any NFL player in the DB matching: {0}".format(optplayer))
-
-        with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT name FROM aliases WHERE id=?", (lookupid,))
-            rows = cursor.fetchall()
-
-        if len(rows) > 0:
-            return(0, "{0}({1}) aliases: {2}".format(optplayer, lookupid, " | ".join([item[0] for item in rows])))
-        else:
-            return(0, "I did not find any aliases for: {0}({1}".format(optplayer, lookupid))
-
-    #######################################
-    # ALIAS AND PLAYER DB PUBLIC FUNCTION #
-    #######################################
-
-    def nfldb(self, irc, msg, args, optinput):
-        """[help]
-        Central database management for teams and players.
-        Issue with help for an explaination. Must be admin to run.
-        """
-
-        commands = {
-                    'addplayer':'adds a new player into the nfl database.',
-                    'delplayer':'deletes a player from the nfl database.',
-                    'addalias':'adds a new alias to a player in the db.',
-                    'delalias':'deletes an alias to a player in the db.',
-                    'listalias':'lists all aliases for a player in the db.',
-                    'stats':'show stats about the database.'
-                   }
-
-        iarg = optinput.split()  # arguments are split by spaces.
-        # first argument is the command.
-        command = iarg[0].lower()  # lower command to match.
-        if command == "addalias":
-            commandresp = self._addalias(iarg[1], " ".join(iarg[2:]))
-        elif command == "delalias":
-            commandresp = self._delalias(" ".join(iarg[1:]))
-        elif command == "listalias":
-            commandresp = self._listalias(" ".join(iarg[1:]))
-        elif command == "delplayer":
-            commandresp = self._delplayer(iarg[1])
-        elif command == "addplayer":
-            commandresp = self._addplayer(iarg[1], iarg[2], " ".join(iarg[3:]))
-        elif command == "stats":
-            commandresp = self._dbstats()
-        else:  # if invalid, 'help', etc.
-            irc.reply("ERROR: Valid nfldb commands are: {0}".format(" | ".join(sorted(commands.keys()))))
-            return
-        # check return value and print.
-        if commandresp[0] == 0:  # success.
-            irc.reply("{0}".format(commandresp[1]))
-        else:  # 1, error.
-            irc.reply("{0}".format(commandresp[1]))
-
-    nfldb = wrap(nfldb, [('checkCapability', 'admin'), ('text')])
+    nfldb = wrap(nfldb)
 
     ####################
     # PUBLIC FUNCTIONS #
@@ -2525,8 +2383,8 @@ class NFL(callbacks.Plugin):
                 else:
                     playerNews = "No news found for player."
         else:  # rworld.
-            lookupid = self._playerLookup('rid', optplayer)
-            if lookupid == "0":
+            lookupid = self._playerLookup('rid', optplayer)  # we missing?
+            if not lookupid:
                 related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
                 irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
                 return
