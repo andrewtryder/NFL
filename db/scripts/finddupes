@@ -1,2 +1,0 @@
-# SELECT * FROM players WHERE fulltext IN ( SELECT fulltext FROM players GROUP BY fulltext  HAVING (COUNT(fulltext ) > 1);
-# DELETE FROM players WHERE rid='' AND eid < 13000
