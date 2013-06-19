@@ -192,8 +192,8 @@ def _addplayer(opteid, optrid, optplayer):
     # everything looks good so lets prep to add.  # 2330|1163|tom brady|tom|brady|TM||PRT|
     optplayer = _sanitizeName(optplayer)  # sanitize.
     namesplit = optplayer.split()  # now we have to split the optplayer into first, last.
-    fndm = doublemetaphone(unicode(namesplit[0]))  # dm first.
-    lndm = doublemetaphone(unicode(namesplit[1]))  # dm last.
+    fndm = doublemetaphone(namesplit[0])  # dm first.
+    lndm = doublemetaphone(namesplit[1])  # dm last.
     # connect to the db and finally add.
     with sqlite3.connect(DB) as db:
         try:
@@ -303,6 +303,58 @@ def inactiveplayers():
     notactive = dbrosters.difference(rosters)
     return notactive
 
+def _badnames():
+    """Find badnames in the database."""
+
+    with sqlite3.connect(DB) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT eid, fullname from players ORDER BY eid")
+        rows = cursor.fetchall()
+    # list to put all entries in.
+    outlist = []
+    # now check each name.
+    for row in rows:  # fullname = row[1]
+        splitname = row[1].split()  # splits on the space.
+        if len(splitname) != 2:  # if the name is not 2. append to list.
+            outlist.append("{0} - {1}".format(row[0], row[1]))
+    # return what we have.
+    return outlist
+
+def _baddm():
+    """Find badnames in the database."""
+
+    with sqlite3.connect(DB) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT eid, fullname, fndm1, lndm1 from players ORDER BY eid")
+        rows = cursor.fetchall()
+    # list to put all entries in.
+    outlist = []
+    # now check each name.
+    for row in rows:  # eid = row[0], fullname = row[1], fndm1 = row[2], lndm1 = row[3]
+        if row[2] == '':
+            outlist.append("{0} - {1} - FNDM1: {2}".format(row[0], row[1], row[2]))
+        if row[3] == '':
+            outlist.append("{0} - {1} - LNDM1: {2}".format(row[0], row[1], row[3]))
+    # return what we have.
+    return outlist
+
+def _rehashdm(eid):
+    """."""
+
+    with sqlite3.connect(DB) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT firstname, lastname FROM players WHERE eid=?", (eid,))
+        row = cursor.fetchone()
+
+    if not row:
+        print "I did not find any player in the db with EID '{0}'".format(eid)
+        return None
+    else:
+        firstname = doublemetaphone(row[0])
+        lastname = doublemetaphone(row[1])
+        print "DM :: FIRSTNAME {0} LASTNAME {1}".format(firstname, lastname)
+        return dm
+
 parser = argparse.ArgumentParser(description='playerdb management script')
 parser.add_argument("--finddupes", action='store_true', help="find duplicate player names in the database.")
 parser.add_argument("--missingrids", action='store_true', help="find players with missing rids.")
@@ -315,6 +367,10 @@ parser.add_argument("--dbstats", action='store_true', help="show statistics abou
 parser.add_argument('--deleteinactive', action='store_true', help="delete the inactive players in the db")
 parser.add_argument("--updatename", action='store', nargs=3, help="update a player's name.")
 parser.add_argument("--eidlookup", action='store', nargs=1, help="print a player's name and team from eid lookup.")
+parser.add_argument("--badnames", action='store_true', help="check the database for bad/broken playernames.")
+parser.add_argument("--baddm", action='store_true', help="check the database for broken primary DM information.")
+parser.add_argument("--rehashdm", action='store', nargs=1, help="recalculate a player's doublemetaphone and store it.")
+parser.add_argument("--addplayer", action='store', nargs=4, help="add a player into the database.")
 
 args = parser.parse_args()
 
@@ -399,5 +455,34 @@ elif args.updatename:
 elif args.eidlookup:
     eidlookup = _eidlookup(args.eidlookup[0])
     print eidlookup
+elif args.badnames:
+    badnames = _badnames()  # returns a list.
+    badnameslength = len(badnames)
+    if badnameslength == 0:  # no badnames.
+        print "I did not find any badnames in the database."
+    else:
+        print "I found {0} badnames in the database.".format(badnameslength)
+        for badname in badnames:
+            print badname
+elif args.baddm:
+    baddms = _baddm()
+    baddmlength = len(baddms)
+    if baddmlength == 0:
+        print "I did not find any bad DM information in the database."
+    else:
+        print "I Found {0} bad DM in the db".format(baddmlength)
+        for baddm in baddms:
+            print baddm
+elif args.rehashdm:  # needs fix.
+    eid = args.rehashdm[0]
+    dm = _rehashdm(eid)
+    print dm
+elif args.addplayer:
+    opteid = args.addplayer[0]
+    optrid = args.addplayer[1]
+    optplayer = " ".join(args.addplayer[2:])
+    # perform trans.
+    addplayer= _addplayer(opteid, optrid, optplayer)
+    print addplayer
 
 #if __name__ == '__main__':
