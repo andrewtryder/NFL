@@ -5,30 +5,26 @@
 ###
 # my libs.
 from BeautifulSoup import BeautifulSoup
+from base64 import b64decode
 import re
 import collections
-import string
 from itertools import groupby, count
+from operator import itemgetter
 import datetime
 import json
-import sqlite3
-import os.path
+import sqlite3  # db.
+import os.path  # db.
 import unicodedata
-from base64 import b64decode
-from operator import itemgetter
+import jellyfish  # matching.
+from metaphone import doublemetaphone  # matching.
 # supybot libs
 import supybot.utils as utils
 from supybot.commands import *
 import supybot.plugins as plugins
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
-from supybot.i18n import PluginInternationalization, internationalizeDocstring
-# python implementation of doublemetaphone
-doublemetaphone = utils.python.universalImport('local.metaphone')
 
-_ = PluginInternationalization('NFL')
 
-@internationalizeDocstring
 class NFL(callbacks.Plugin):
     """Add the help for "@plugin help NFL" here
     This should describe *how* to use this plugin."""
@@ -59,13 +55,13 @@ class NFL(callbacks.Plugin):
         """Returns a green string."""
         return ircutils.mircColor(string, 'green')
 
-    def _bold(self, string):
-        """Returns a bold string."""
-        return ircutils.bold(string)
-
     def _blue(self, string):
         """Returns a blue string."""
         return ircutils.mircColor(string, 'blue')
+
+    def _bold(self, string):
+        """Returns a bold string."""
+        return ircutils.bold(string)
 
     def _ul(self, string):
         """Returns an underline string."""
@@ -184,7 +180,7 @@ class NFL(callbacks.Plugin):
     ####################################
 
     def _allteams(self, conf=None, div=None):
-        """Return a list of all valid teams (abbr)."""
+        """Return a string of all valid teams (abbr)."""
 
         with sqlite3.connect(self._nfldb) as conn:
             cursor = conn.cursor()
@@ -205,21 +201,21 @@ class NFL(callbacks.Plugin):
         Returns a 1 upon error (no team name nor alias found.)
         Returns the team's 3-letter (ex: NE or ARI) if successful."""
 
+        # first, set default value.
+        returnval = None
+        # now, do our sql.
         with sqlite3.connect(self._nfldb) as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor()  # we only do exact matching here. no fuzzy.
             query = "SELECT team FROM nflteamaliases WHERE teamalias LIKE ?"  # check aliases first.
             cursor.execute(query, ('%'+self._sanitizeName(optteam)+'%',))
             aliasrow = cursor.fetchone()
-            if not aliasrow:  # no alias found so we're gonna check team
-                query = "SELECT team FROM nfl WHERE team=?"
-                cursor.execute(query, (optteam.upper(),)) # standard lookup. go upper. nyj->NYJ.
-                teamrow = cursor.fetchone()
-                if not teamrow:  # team is not found. Error.
-                    returnval = 1  # checked in each command.
-                else: # ex: NYJ
-                    returnval = str(teamrow[0])
-            else:  # alias turns into team like patriots->NE.
+            if aliasrow:  # we found a team alias.
                 returnval = str(aliasrow[0])
+            else:  # no team alias so we go back to normal team matching.
+                cursor.execute("SELECT team FROM nfl WHERE team=?", (optteam.upper(),))
+                teamrow = cursor.fetchone()
+                if teamrow:  # found team in regular nfl teams. no match? None.
+                    returnval = str(teamrow[0])
         # return time.
         return returnval
 
@@ -229,10 +225,9 @@ class NFL(callbacks.Plugin):
         with sqlite3.connect(self._nfldb) as conn:
             cursor = conn.cursor()
             query = "SELECT %s FROM nfl WHERE %s='%s'" % (db, column, optteam)
-            cursor.execute(query)
-            row = cursor.fetchone()
-        # return time.
-        return (str(row[0]))
+            cursor.execute(query)  # obv, breaks if string is not there.
+            row = cursor.fetchone()  # we want this so we can fix the function/code.
+            return (str(row[0])) # return.
 
     ######################################
     # INTERNAL PLAYER DATABASE FUNCTIONS #
@@ -242,53 +237,60 @@ class NFL(callbacks.Plugin):
         """ Sanitize name. """
 
         name = name.lower()  # lower.
-        name = name.replace('.','')  # remove periods.
-        name = name.replace('-','')  # remove dashes.
-        name = name.replace("'",'')  # remove apostrophies.
+        name = name.strip('.')  # remove periods.
+        name = name.strip('-')  # remove dashes.
+        name = name.strip("'")  # remove apostrophies.
         # possibly strip jr/sr/III suffixes in here?
         return name
 
     def _similarPlayers(self, optname):
         """Return a dict containing the five most similar players based on optname."""
 
-        optname = self._sanitizeName(optname)  # first sanitize.
+        optname = self._sanitizeName(optname)  # first sanitize input to compare.
+        jaro, damerau = [], []  # empty lists to put our results in.
+        # now do our sql work.
         with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT eid, rid, fullname FROM players")
+            cursor = db.cursor()  # select all fullnames, eid, rid.
+            cursor.execute("SELECT fullname, eid, rid FROM players")
             rows = cursor.fetchall()
-        # container for out.
-        outlist = []
-        # iterate over each and put into a dict, insert into list.
-        for row in rows:
-            tmpdict = {}
-            tmpdict['dist'] = int(utils.str.distance(str(optname), str(row[2])))
-            tmpdict['name'] = row[2]
-            tmpdict['rid'] = row[1]
-            tmpdict['eid'] = row[0]
-            outlist.append(tmpdict)
-        # sort the list and keep the top5.
-        outlist = sorted(outlist, key=itemgetter('dist'), reverse=False)[0:5]
-        return outlist
+        # close. iterate over all rows and do math.
+        for row in rows:  # row[0] = fullname, row[1] = eid, row[2] = rid
+            jaroscore = jellyfish.jaro_distance(optname, row[0])  # jaro.
+            damerauscore = jellyfish.damerau_levenshtein_distance(optname, row[0])  #dld
+            jaro.append({'jaro':jaroscore, 'fullname':row[0], 'eid':row[1], 'rid':row[2]})  # add dict to list.
+            damerau.append({'damerau':damerauscore, 'fullname':row[0], 'eid':row[1], 'rid':row[2]})  # ibid.
+        # now, we do two "sorts" to find the "top5" matches. reverse is opposite on each.
+        jarolist = sorted(jaro, key=itemgetter('jaro'), reverse=True)[0:5]  # bot five.
+        dameraulist = sorted(damerau, key=itemgetter('damerau'), reverse=False)[0:5]  # top five.
+        # we now have two lists, top5 sorted, and need to do some further things.
+        # now, lets iterate through both lists. match if both are in it. (better matches)
+        matching = [k for k in jarolist if k['eid'] in [f['eid'] for f in dameraulist]]
+        # now, test if we have anything. better matches will have more.
+        if len(matching) == 0:  # we have NO matches. grab the top two from jaro/damerau (for error str)
+            matching = [jarolist[0], dameraulist[0], jarolist[1], dameraulist[1]]
+            self.log.info("NO MATCHES " + str(matching))
+        # return matching now.
+        return matching
 
     def _playerLookup(self, table, optname):
         """Return the specific id in column (eid, rid) for player."""
 
         optname = self._sanitizeName(optname)  # first sanitize.
-        with sqlite3.connect(self._playersdb) as db:
+        with sqlite3.connect(self._playersdb) as db:  # everything within 'with' cuz we might need to access db.
             cursor = db.cursor()  # first, check for an alias below.
             query = "SELECT %s FROM players WHERE eid IN (SELECT id FROM aliases WHERE name LIKE ?)" % (table)
             cursor.execute(query, ('%'+optname+'%',))  # wrap the alias in %.
             aliasrow = cursor.fetchone()
-            if aliasrow is None:  # if no alias.
+            if not aliasrow:  # if no alias.
                 cursor = db.cursor()  # go into normal player db. %first%last% search.
                 query = "SELECT %s FROM players WHERE fullname LIKE ?" % (table)
                 cursor.execute(query, ('%'+optname.replace(' ', '%')+'%',))  # wrap in % and replace space with wc.
                 row = cursor.fetchone()
-                if row is None:  # we did not find a %name%match% nor alias. check dm for mispellings.
+                if not row:  # we did not find a %name%match% nor alias. check dm for mispellings.
                     namesplit = optname.split()  # clean-up function here.
                     if len(namesplit) > 1:  # we have more than one, first and last. assume 0 is first, 1 is last.
-                        fndm = doublemetaphone.dm(unicode(namesplit[0]))  # get our list of first-name dm.
-                        lndm = doublemetaphone.dm(unicode(namesplit[1]))  # get our list of last-name dm.
+                        fndm = doublemetaphone(namesplit[0])  # get our list of first-name dm.
+                        lndm = doublemetaphone(namesplit[1])  # get our list of last-name dm.
                         if lndm[1] != '':  # if we have a secondary dm code.
                             query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
                         else:  # check only primary lastname dm.
@@ -298,7 +300,7 @@ class NFL(callbacks.Plugin):
                         else:  # only check first name primary dm.
                             query += " AND fndm1='%s'" % (fndm[0])
                     else:  # assume one name given and that we check only on the last.
-                        lndm = doublemetaphone.dm(unicode(namesplit[0]))
+                        lndm = doublemetaphone(namesplit[0])
                         if lndm[1] != '':  # secondary dm code.
                             query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
                         else:  # primary dm check only.
@@ -306,12 +308,19 @@ class NFL(callbacks.Plugin):
                     # now that we have DM query, execute.
                     cursor.execute(query)  # query constructed above.
                     row = cursor.fetchone()
-                    if not row:  # dm failed. last chance to try using edit distance.
-                        names = self._similarPlayers(optname)  # get a list back with similar players.
-                        if names[0]['dist'] < 7:  # sorted list. check the first. if edit distance less than seven..
-                            optid = str(names[0][table])  # first one, less than seven, return eid.
-                        else:  # after everything, we found nothing. Return 0
-                            optid = None
+                    if not row:  # dm failed. last chance to try using fuzzy string matching.
+                        names = self._similarPlayers(optname)  # get a list of dicts back based on optname.
+                        for sname in names:  # iterate through what we give back. might be different # of elements.
+                            if 'jaro' in sname:  # don't know if we'll have jaro or damerau
+                                if sname['jaro'] > 0.7:  # over the 0.7 threshold is usually good.
+                                    optid = str(sname[table])  # grab the id we're looking for.
+                                    break  # stop iteration.
+                            if 'damerau' in sname:  # now if we have damerau.
+                                if sname['damerau'] < 7:  # less than seven on it.
+                                    optid = str(sname[table])  # grab the id we're looking for.
+                                    break  # break.
+                        else:  # if we're here, we did NOT find any good jaro/damerau matches and out of the for loop.
+                            optid = names  # we return a list of names.
                     else: # dm worked so we return the id matched by dm.
                         optid = str(row[0])
                 else:  # fullname query worked so return the id matched by fullname.
@@ -327,7 +336,7 @@ class NFL(callbacks.Plugin):
 
     def nfldb(self, irc, msg, args):
         """
-        Return stats about the player database.
+        Return stats about the NFL teams and players databases.
         """
 
         # playerdb query.
@@ -449,12 +458,12 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # test for valid year.
         if not self._validate(optyear, '%Y'):
-            irc.reply("ERROR: '{0}' is an invalid year. Must input a valid year.")
+            irc.reply("ERROR: '{0}' is an invalid year. Must input a valid year.".format(optyear))
             return
         # build and fetch url.
         lookupteam = self._translateTeam('pfrurl', 'team', optteam)
@@ -582,8 +591,8 @@ class NFL(callbacks.Plugin):
             sb_data[roman] = appendString
             sb_data[year] = appendString
         # output time.
-        output = sb_data.get(optbowl.upper(), None)
-        if output is None:
+        output = sb_data.get(optbowl.upper())
+        if not output:
             irc.reply("ERROR: No Super Bowl found for: {0} (Check formatting)".format(optbowl))
         else:
             irc.reply(output)
@@ -598,11 +607,11 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         optopp = self._validteams(optopp)
-        if optopp is 1: # team is not found in aliases or validteams.
+        if not optopp: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # make sure they're not the same.
@@ -631,12 +640,12 @@ class NFL(callbacks.Plugin):
             wins = tds[1].getText()
             loss = tds[2].getText()
             ties = tds[3].getText()
-            total = wins + loss + ties
+            # total = wins + loss + ties
             perc = tds[4].getText()
             pwins = tds[7].getText()
             ploss = tds[8].getText()
-            ptotal = pwins + ploss
-            head2head[team] = ":: REG SEASON({0}) {1}-{2}-{3} ({4}) :: PLAYOFFS({5}) {6}-{7}".format(total, wins, loss, ties, perc, ptotal,  pwins, ploss)
+            # ptotal = pwins + ploss
+            head2head[team] = ":: REG SEASON {0}-{1}-{2} ({3}) :: PLAYOFFS {4}-{5}".format(wins, loss, ties, perc, pwins, ploss)
         # output time.
         output = head2head.get(optopp)
         if not output:
@@ -655,7 +664,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # process and fetch url.
@@ -703,7 +712,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # check to make sure year is valid and between 1965 and now.
@@ -758,7 +767,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # fetch url.
@@ -1186,7 +1195,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # build and fetch url.
@@ -1386,7 +1395,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # need the specific spotrac for the url.
@@ -1434,7 +1443,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # build and fetch url.
@@ -1473,7 +1482,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
         # check the type (o/d/s)
@@ -1525,7 +1534,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
@@ -1600,7 +1609,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
@@ -1750,7 +1759,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
@@ -1792,7 +1801,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
@@ -1883,7 +1892,7 @@ class NFL(callbacks.Plugin):
         if optteam:  # if we have a team, check if its valid.
             # test for valid teams.
             optteam = self._validteams(optteam)
-            if optteam is 1: # team is not found in aliases or validteams.
+            if not optteam: # team is not found in aliases or validteams.
                 irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
                 return
 
@@ -1927,6 +1936,7 @@ class NFL(callbacks.Plugin):
         if not optteam:  # no team so output the list.
             irc.reply("{0} :: {1}".format(self._blue(headline.getText()), datehead.getText()))
             for N in self._batch(powerrankings, 12):  # iterate through each team. 12 per line
+                #
                 irc.reply("{0}".format(string.join([item for item in N], " | ")))
         else:  # find the team and only output that team.
             output = prtable.get(str(optteam), None)
@@ -1952,7 +1962,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
@@ -2143,7 +2153,6 @@ class NFL(callbacks.Plugin):
                 # create string. apppend.
                 appendString = "{0} :: {1}{2}{3} :: {4} {5}".format(date, self._bold(fromteam), self._red('->'), self._bold(toteam), player, data)
                 nfltrade_list.append(appendString)
-
         # output time.
         irc.reply("Last 5 NFL Trades")
         # now output the first 5.
@@ -2255,7 +2264,7 @@ class NFL(callbacks.Plugin):
 
         # test for valid teams.
         optteam = self._validteams(optteam)
-        if optteam is 1: # team is not found in aliases or validteams.
+        if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
@@ -2323,27 +2332,44 @@ class NFL(callbacks.Plugin):
     # NFL PLAYER DATABASE PUBLIC FUNCTIONS #
     ########################################
 
-    def nflplayers(self, irc, msg, args, optname):
+    def nflplayers(self, irc, msg, args, optlist, optname):
         """<player>
         Search and find NFL players. Must enter exact/approx name since no fuzzy matching is done here.
         Ex: Tom Brady
         """
 
+        # handle getopts/optlist input.
+        showFull = False  # setup variables.
+        if optlist:  # if we have input.
+            if 'full' in dict(optlist):  # if --full is specified.
+                showFull = True  # showFull is on.
+
         optplayer = self._sanitizeName(optname)  # sanitize optname.
-        with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT eid, rid, fullname FROM players WHERE fullname LIKE ?", ('%'+optplayer.replace(' ','%')+'%',))
+        with sqlite3.connect(self._playersdb) as db:  # connect to db.
+            cursor = db.cursor()  # below, we select eid/rid/fullname %name% and replace spaces in name with %.
+            cursor.execute("SELECT eid, rid, fullname FROM players WHERE fullname LIKE ? ORDER BY eid", ('%'+optplayer.replace(' ','%')+'%',))
             rows = cursor.fetchall()
         # check if we found anything.
-        if len(rows) < 1:
+        if len(rows) == 0:
             irc.reply("ERROR: Sorry, I did not find any players matching {0}".format(optname))
             return
-        # otherwise, output.
-        irc.reply("{0} | {1} | {2}".format("EID","RID","NAME"))
-        for row in rows:
-            irc.reply("{0} {1} {2}".format(row[0], row[1], row[2]))
+        # we did find stuff, so. otherwise, output.
+        if not showFull:  # regular search, no full results.
+            irc.reply("Matching players found({0}): {1}".format(len(rows), " | ".join(sorted([i[2] for i in rows]))))
+        else:  # show full results.
+            for i, row in enumerate(rows):  # iterate through. eid=row[0], rid=row[1], fullname=row[2]
+                rowout = "| {0:6} | {1:6} | {2:30} |".format(row[0], row[1], row[2])
+                if i == 0:  # first row. so we want our header below.
+                    irc.reply("| {0:>6} | {1:>6} | {2:<30} |".format("EID","RID","NAME"))
+                    irc.reply("|{0:{1}<8}|{0:{1}<8}|{0:{1}<32}|".format("", "-"))
+                    irc.reply(rowout)
+                elif i == 6:  # if we're here, we already printed 5 results.
+                    irc.reply("Sorry, I found too many results for '{0}' (Total: {1}). Try something more specific.".format(optname, len(rows)))
+                    break
+                else:  # all other rows.
+                    irc.reply(rowout)
 
-    nflplayers = wrap(nflplayers, [('text')])
+    nflplayers = wrap(nflplayers, [getopts({'full':''}), ('text')])
 
     def nflplayernews(self, irc, msg, args, optplayer):
         """<player>
@@ -2353,27 +2379,30 @@ class NFL(callbacks.Plugin):
 
         useSPN = False  # simple bypass as I found wrold but am not sure how long it will work.
         if useSPN:  # conditional to use SPN here. We'll use rworld.
-            lookupid = self._playerLookup('eid', optplayer)
-            if lookupid == "0":
-                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("No player found for: '{0}'. Related names: {1}".format(optplayer, related))
-                return
-
+            if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+                lookupid = optplayer  # if it is, set.
+            else:  # else, lookup the playername.
+                lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
+                if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                    related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                    irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
+                    return
+            # build and fetch url.
             url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcnVwZGF0ZQ==') + '?playerId=%s&wjb=' % lookupid
             html = self._httpget(url)
             if not html:
                 irc.reply("ERROR: Failed to fetch {0}.".format(url))
                 self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
                 return
-
+            # process html.
             soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
             playerName = soup.find('div', attrs={'class': 'sub bold'})
-            if not playerName:
+            if not playerName:  # sanity check here.
                 irc.reply("I could not find any news. Did formatting change?")
                 return
-            else:
+            else:  # get their formal name.
                 playerName = playerName.getText()
-
+            # find the div where "news" is in.
             if soup.find('div', attrs={'class': 'ind line'}):
                 playerNews = soup.find('div', attrs={'class': 'ind line'})
                 extraPlayerNews = playerNews.find('div', attrs={'style': 'font-style:italic;'})
@@ -2382,12 +2411,15 @@ class NFL(callbacks.Plugin):
                     playerNews = self._remove_accents(playerNews.getText())
                 else:
                     playerNews = "No news found for player."
-        else:  # rworld.
-            lookupid = self._playerLookup('rid', optplayer)  # we missing?
-            if not lookupid:
-                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
-                return
+        else:  # use rworld.
+            if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+                lookupid = optplayer  # set the id as the digit itself.
+            else:  # else, lookup the playername.
+                lookupid = self._playerLookup('rid', optplayer)  # we get a str back or list. str="found", list="not found".
+                if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                    related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                    irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
+                    return
             # build and fetch url.
             url = self._b64decode('aHR0cDovL2Rldi5yb3Rvd29ybGQuY29tL3NlcnZpY2VzL21vYmlsZS5hc214L0dldEpTT05TaW5nbGVQbGF5ZXJOZXdzP3Nwb3J0PU5GTA==') + '&playerid=%s' % lookupid
             html = self._httpget(url)
@@ -2403,10 +2435,10 @@ class NFL(callbacks.Plugin):
             else:  # we did find some playernews.
                 jsondata = jsondata[0]
                 playerName = jsondata['FirstName'] + " " + jsondata['LastName']
-                timestamp = jsondata.get('TimeStamp', None) # RawTimeStamp
-                headline = jsondata.get('Headline', None)
-                impact = jsondata.get('Impact', None)
-                news = jsondata.get('News', None)
+                timestamp = jsondata.get('TimeStamp')  # RawTimeStamp
+                headline = jsondata.get('Headline')
+                impact = jsondata.get('Impact')
+                news = jsondata.get('News')
                 # now construct playernews string for output.
                 playerNews = ""
                 if timestamp: playerNews += "{0}".format(timestamp)
@@ -2414,7 +2446,7 @@ class NFL(callbacks.Plugin):
                 if news: playerNews += " {0}".format(news.encode('utf-8').replace('&quot;', '"'))
                 if impact: playerNews += " {0}".format(impact.encode('utf-8').replace('&quot;', '"'))  #self._remove_accents(impact))
 
-        # finally, lets output.
+        # finally, lets output. this works with both methods above.
         output = "{0} :: {1}".format(self._red(playerName), utils.str.normalizeWhitespace(playerNews))
         irc.reply(output)
 
@@ -2426,13 +2458,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
-        if optplayer.isdigit():  # if we use the eid directly.
-            lookupid = optplayer
-        else: # lookup the playername
-            lookupid = self._playerLookup('eid', optplayer)
-            if lookupid == "0":
-                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+            lookupid = optplayer  # if it is, set.
+        else:  # else, lookup the playername.
+            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
+            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcmluZm8=') + '?playerId=%s&wjb=' % lookupid
@@ -2469,13 +2501,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
-        if optplayer.isdigit():  # we're using a direct rid to lookup a contract.
-            lookupid = optplayer
-        else:  # lookup the player by name.
-            lookupid = self._playerLookup('rid', optplayer)
-            if lookupid == "0":  # player not found
-                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+            lookupid = optplayer  # if it is, set.
+        else:  # else, lookup the playername.
+            lookupid = self._playerLookup('rid', optplayer)  # we get a str back or list. str="found", list="not found".
+            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5yb3Rvd29ybGQuY29tL3BsYXllci9uZmwv') + '%s/' % lookupid
@@ -2506,11 +2538,14 @@ class NFL(callbacks.Plugin):
         Ex: Eli Manning
         """
 
-        lookupid = self._playerLookup('eid', optplayer)
-        if lookupid == "0":
-            related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-            irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
-            return
+        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+            lookupid = optplayer  # if it is, set.
+        else:  # else, lookup the playername.
+            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
+            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
+                return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
         html = self._httpget(url)
@@ -2551,13 +2586,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
-        if optplayer.isdigit():  # check for eid.
-            lookupid = optplayer
-        else:  # lookup player.
-            lookupid = self._playerLookup('eid', optplayer)
-            if lookupid == "0":
-                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+            lookupid = optplayer  # if it is, set.
+        else:  # else, lookup the playername.
+            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
+            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
@@ -2619,7 +2654,7 @@ class NFL(callbacks.Plugin):
                     statcategories[str(stathead.getText().replace('Stats', '').strip().lower())] = f
         # prepare output string.
         output = []
-        if postostats.has_key(pos):  # if we want specific stats.
+        if pos in postostats:  # if we want specific stats.
             for each in postostats[pos]:
                 if statcategories.has_key(each):
                     output.append("{0}: {1}".format(self._ul(each.title()), " | ".join(stats.get(statcategories[each]))))
@@ -2660,13 +2695,13 @@ class NFL(callbacks.Plugin):
             else:  # else, use current year.
                 season = str(datetime.datetime.now().year)
         # now that we have the season, lookup the player.
-        if optplayer.isdigit():  # direct eid.
-            lookupid = optplayer
-        else:  # lookup the player.
-            lookupid = self._playerLookup('eid', optplayer)
-            if lookupid == "0":
-                related = ' | '.join([item['name'].title() for item in self._similarPlayers(optplayer)])
-                irc.reply("ERROR: No player found for: '{0}'. Related names: {1}".format(optplayer, related))
+        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+            lookupid = optplayer  # if it is, set.
+        else:  # else, lookup the playername.
+            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
+            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
@@ -2723,12 +2758,13 @@ class NFL(callbacks.Plugin):
                 if key == 'games':  # how many games?
                     optgames = value
         # now lookup the player.
-        if optplayer.isdigit():  # lookup by eid.
-            lookupid = optplayer
-        else:  # lookup the player.
-            lookupid = self._playerLookup('eid', optplayer.lower())
-            if lookupid == "0":
-                irc.reply("No player found for: %s" % optplayer)
+        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
+            lookupid = optplayer  # if it is, set.
+        else:  # else, lookup the playername.
+            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
+            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
+                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
+                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lk') + '/%s/' % lookupid
