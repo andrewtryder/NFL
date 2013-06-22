@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-import sqlite3
+# libs
 import argparse
+import sqlite3
 from base64 import b64decode
 import json
 import urllib
@@ -10,7 +10,7 @@ import urllib2
 from BeautifulSoup import BeautifulSoup
 import re
 from metaphone import doublemetaphone
-
+# WHERE IS THE DB?
 DB="../nfl_players.db"
 
 # INTERNALS
@@ -38,6 +38,10 @@ def _eidlookup(eid):
 
 def _addalias(optid, optalias):
     """<eid> <alias> Add a player alias. Ex: 2330 gisele"""
+
+    optplayer = _eidlookup(optid)  # lookup player name.
+    if not optplayer:
+        return "Sorry, {0} is an invalid playerid.".format(optid)
 
     optalias = optalias.lower()  # sanitize name so it conforms.
     with sqlite3.connect(DB) as db:
@@ -68,6 +72,10 @@ def _delalias(optalias):
 def _listalias(lookupid):
     """<player|eid> Fetches aliases for player. Specify the player name or their eid. Ex: Tom Brady or 2330."""
 
+    optplayer = _eidlookup(lookupid)  # lookup player name.
+    if not optplayer:
+        return "Sorry, {0} is an invalid playerid.".format(lookupid)
+
     with sqlite3.connect(DB) as db:
         cursor = db.cursor()
         cursor.execute("SELECT name FROM aliases WHERE id=?", (lookupid,))
@@ -77,7 +85,7 @@ def _listalias(lookupid):
         else:
             return("I did not find any aliases for: {0}({1}".format(optplayer, lookupid))
 
-def _eidlookup(eid):
+def _eidnamelookup(eid):
     """Looks up player name + team using EID."""
 
     url = b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcmluZm8/cGxheWVySWQ9') + eid + '&wjb='
@@ -358,20 +366,22 @@ def _rehashdm(eid):
 parser = argparse.ArgumentParser(description='playerdb management script')
 parser.add_argument("--finddupes", action='store_true', help="find duplicate player names in the database.")
 parser.add_argument("--missingrids", action='store_true', help="find players with missing rids.")
-parser.add_argument("--updaterid", action='store', nargs=2, help="update a players rid.")
-parser.add_argument('--rotofind', action='store', nargs=2, help="Find a players roto id.")
+parser.add_argument("--updaterid", action='store', nargs=2, metavar=('EID', 'RID'), help="update a players rid.")
+parser.add_argument('--rotofind', action='store', nargs=2, metavar=('EID', 'RID'), help="Find a players roto id.")
 parser.add_argument("--fixmissingroto", action='store_true', help="Attempt to fix missing roto ids automatic.")
 parser.add_argument("--missingplayers", action='store_true', help="find players missing from the database.")
 parser.add_argument("--inactiveplayers", action='store_true', help="find inactive players in db but not on roster.")
 parser.add_argument("--dbstats", action='store_true', help="show statistics about the database.")
 parser.add_argument('--deleteinactive', action='store_true', help="delete the inactive players in the db")
-parser.add_argument("--updatename", action='store', nargs=3, help="update a player's name.")
-parser.add_argument("--eidlookup", action='store', nargs=1, help="print a player's name and team from eid lookup.")
+parser.add_argument("--updatename", action='store', nargs=3, metavar=('EID', '', ''), help="update a player's name.")
+parser.add_argument("--eidlookup", action='store', nargs=1, metavar=('EID'), help="print a player's name and team from eid lookup.")
 parser.add_argument("--badnames", action='store_true', help="check the database for bad/broken playernames.")
 parser.add_argument("--baddm", action='store_true', help="check the database for broken primary DM information.")
-parser.add_argument("--rehashdm", action='store', nargs=1, help="recalculate a player's doublemetaphone and store it.")
-parser.add_argument("--addplayer", action='store', nargs=4, help="add a player into the database.")
-
+parser.add_argument("--rehashdm", action='store', nargs=1, metavar=('EID'), help="recalculate a player's doublemetaphone and store it.")
+parser.add_argument("--addplayer", action='store', nargs=4, metavar=('EID', 'ALIAS', '', ''), help="add a player into the database.")
+parser.add_argument("--addalias", action='store', nargs=2, metavar=('EID', 'ALIAS'), help="add an alias to a player in the db.")
+parser.add_argument("--delalias", action='store', nargs=1, metavar=('ALIAS'), help="Delete an alias for a player.")
+parser.add_argument("--listalias", action='store', nargs=1, metavar=('EID'), help="list player aliases")
 args = parser.parse_args()
 
 if args.finddupes:
@@ -453,7 +463,7 @@ elif args.updatename:
     update = updatename(eid, pn)
     print update
 elif args.eidlookup:
-    eidlookup = _eidlookup(args.eidlookup[0])
+    eidlookup = _eidnamelookup(args.eidlookup[0])
     print eidlookup
 elif args.badnames:
     badnames = _badnames()  # returns a list.
@@ -484,5 +494,18 @@ elif args.addplayer:
     # perform trans.
     addplayer= _addplayer(opteid, optrid, optplayer)
     print addplayer
+elif args.addalias:  # add alias.
+    opteid = args.addalias[0]
+    optalias = args.addalias[1]
+    addalias = _addalias(opteid, optalias)
+    print addalias
+elif args.delalias:  # delete alias.
+    optalias = args.delalias[0]
+    delalias = _delalias(optalias)
+    print delalias
+elif args.listalias:  # list a player's alias.
+    opteid = args.listalias[0]
+    listalias = _listalias(opteid)
+    print listalias
 
 #if __name__ == '__main__':
