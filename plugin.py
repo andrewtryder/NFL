@@ -287,7 +287,7 @@ class NFL(callbacks.Plugin):
                 cursor.execute(query, ('%'+optname.replace(' ', '%')+'%',))  # wrap in % and replace space with wc.
                 row = cursor.fetchone()
                 if not row:  # we did not find a %name%match% nor alias. check dm for mispellings.
-                    namesplit = optname.split()  # clean-up function here.
+                    namesplit = optname.split()  ############### clean-up function here. #####################
                     if len(namesplit) > 1:  # we have more than one, first and last. assume 0 is first, 1 is last.
                         fndm = doublemetaphone(namesplit[0])  # get our list of first-name dm.
                         lndm = doublemetaphone(namesplit[1])  # get our list of last-name dm.
@@ -315,12 +315,12 @@ class NFL(callbacks.Plugin):
                                 if sname['jaro'] > 0.7:  # over the 0.7 threshold is usually good.
                                     optid = str(sname[table])  # grab the id we're looking for.
                                     break  # stop iteration.
-                            if 'damerau' in sname:  # now if we have damerau.
+                            if 'damerau' in sname:  # now if we have damerau. we're here if its a damerau match instead of jaro.
                                 if sname['damerau'] < 7:  # less than seven on it.
                                     optid = str(sname[table])  # grab the id we're looking for.
                                     break  # break.
                         else:  # if we're here, we did NOT find any good jaro/damerau matches and out of the for loop.
-                            optid = names  # we return a list of names.
+                            optid = names  # we return a list of names. this is used to display "similar players"
                     else: # dm worked so we return the id matched by dm.
                         optid = str(row[0])
                 else:  # fullname query worked so return the id matched by fullname.
