@@ -1592,11 +1592,11 @@ class NFL(callbacks.Plugin):
 
         if useNum:
             if nflroster.has_key(str(optposition)):
-                output = "{0} #{1} is: {2}".format(optteam, optposition, "".join(nflroster.get(str(optposition))))
+                output = "{0} #{1} is: {2}".format(self._red(optteam), self._bold(optposition), "".join(nflroster.get(str(optposition))))
             else:
                 output = "I did not find a person matching number: {0} on {1}".format(optposition, optteam)
         else:
-            output = "{0} on {1} :: {2}".format(optposition, optteam, " | ".join(positiongroups.get(str(validpositions[optposition]))))
+            output = "{0} on {1} :: {2}".format(self._bold(optposition), self._red(optteam), " | ".join(positiongroups.get(str(validpositions[optposition]))))
 
         irc.reply("{0}".format(output))
 
