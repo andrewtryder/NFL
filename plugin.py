@@ -1557,7 +1557,7 @@ class NFL(callbacks.Plugin):
             useNum = False
             optposition = optposition.upper()  # upper so we can match keys.
             if optposition not in validpositions:
-                irc.reply("ERROR: When looking up position groups, it must be one of: %s" % validpositions.keys())
+                irc.reply("ERROR: When looking up position groups, it must be one of: {0}".format(" | ".join(sorted(validpositions.keys()))))
                 return
 
         url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/roster' % lookupteam
