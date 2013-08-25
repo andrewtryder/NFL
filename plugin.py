@@ -1595,7 +1595,7 @@ class NFL(callbacks.Plugin):
             else:
                 output = "I did not find a person matching number: {0} on {1}".format(optposition, optteam)
         else:
-            output = "{0} on {1} :: {2}".format(optposition, optteam, " | ".join(positiongroups.get(str(validpositions[optposition]))))
+            output = "{0} on {1} :: {2}".format(optposition, optteam, " | ".join(positiongroups.get(str(validpositions[optposition.upper()]))))
 
         irc.reply("{0}".format(output))
 
