@@ -1555,6 +1555,7 @@ class NFL(callbacks.Plugin):
         optposition = optposition.replace('#','') # remove # infront of # if there.
         if not optposition.isdigit(): # if we are not a digit, check if we're in valid positions.
             useNum = False
+            optposition = optposition.upper()  # upper so we can match keys.
             if optposition not in validpositions:
                 irc.reply("ERROR: When looking up position groups, it must be one of: %s" % validpositions.keys())
                 return
@@ -1595,7 +1596,7 @@ class NFL(callbacks.Plugin):
             else:
                 output = "I did not find a person matching number: {0} on {1}".format(optposition, optteam)
         else:
-            output = "{0} on {1} :: {2}".format(optposition, optteam, " | ".join(positiongroups.get(str(validpositions[optposition.upper()]))))
+            output = "{0} on {1} :: {2}".format(optposition, optteam, " | ".join(positiongroups.get(str(validpositions[optposition]))))
 
         irc.reply("{0}".format(output))
 
