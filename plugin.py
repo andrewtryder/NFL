@@ -1938,7 +1938,7 @@ class NFL(callbacks.Plugin):
             irc.reply("{0} :: {1}".format(self._blue(headline.getText()), datehead.getText()))
             for N in self._batch(powerrankings, 12):  # iterate through each team. 12 per line
                 #
-                irc.reply("{0}".format(string.join([item for item in N], " | ")))
+                irc.reply("{0}".format(" | ".join([item for item in N])))
         else:  # find the team and only output that team.
             output = prtable.get(str(optteam), None)
             if not output:
@@ -2015,7 +2015,7 @@ class NFL(callbacks.Plugin):
 
                 append_list.append(appendString)
 
-            descstring = string.join([item for item in append_list], " | ")
+            descstring = " | ".join([item for item in append_list])
             output = "{0} SCHED :: {1}".format(ircutils.mircColor(optteam, 'red'), descstring)
             irc.reply(output)
         else:
