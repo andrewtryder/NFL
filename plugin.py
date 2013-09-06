@@ -1299,7 +1299,6 @@ class NFL(callbacks.Plugin):
             for t in game:
                 awayTeam = self._translateTeam('team', 'nid', t['awayTeamId'])
                 homeTeam = self._translateTeam('team', 'nid', t['homeTeamId'])
-                # teamdict.setdefault(pick_team, []).append(appendString)
                 gamesweek.setdefault(t['date']['num'], []).append("{0}@{1} {2}".format(awayTeam, homeTeam, t['date']['time']))
         # now output.
         output = "{0} :: {1}".format(self._bu(weekOutput), " || ".join([self._bold("[" + k + "]") + " " + " | ".join([i for i in v]) for (k, v) in gamesweek.items()]))
