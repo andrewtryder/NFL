@@ -1225,28 +1225,32 @@ class NFL(callbacks.Plugin):
     nflteamrankings = wrap(nflteamrankings, [('somethingWithoutSpaces')])
 
     def nflweek(self, irc, msg, args, optlist, optweek):
-        """[week #|next]
-        Display this week's schedule in the NFL. Issue week # to display that week's games. Ex: 17.
+        """[--pre week #|week #|next]
+
+        Display this week's schedule in the NFL.
+        Issue week # to display that week's games.
+        Ex: 17 OR next
         """
 
+        # work with getopt.
         usePre, useNext, outputWeek = False, False, False
         for (option, arg) in optlist:
             if option == 'pre':
                 usePre = True
-
+        # determine our week.
         if optweek:
             if optweek == "next":
                 useNext = True
             elif optweek.isdigit():
                 if usePre:
                     if 1 <= int(optweek) <= 4:
-                       outputWeek = "Preseason Week %s" % optweek
+                        outputWeek = "Preseason Week {0}".format(optweek)
                     else:
                         irc.reply("ERROR: Preseason week number must be between 1 and 4.")
                         return
-                else:
+                else:  # not pre.
                     if 1 <= int(optweek) <= 17:
-                        outputWeek = "Week %s" % optweek
+                        outputWeek = "Week {0}".format(optweek)
                     else:
                         irc.reply("ERROR: Week must be between 1-17")
                         return
@@ -1258,13 +1262,13 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # load the json.
         jsondata = json.loads(html)
-        week = jsondata.get('week', None)  # work with the week data so we know where we are.
-        if week is None:
+        week = jsondata.get('week')  # work with the week data so we know where we are.
+        if not week:
             irc.reply("ERROR: Failed to load schedule.")
             return
-
+        # figure out current/next
         currentWeekName = week.get('current', {'current': None}).get('weekName', None)
         nextWeekName = week.get('next', {'next': None}).get('weekName', None)
         if currentWeekName is None:
@@ -1273,9 +1277,9 @@ class NFL(callbacks.Plugin):
         if useNext and not nextWeekName:
             irc.reply("ERROR: Cannot figure out the next week.")
             return
-
-        games = jsondata.get('content', None)  # data in games.
-        if games is None:
+        # now the actual games.
+        games = jsondata.get('content')  # data in games.
+        if not games:
             irc.reply("ERROR: Failed to load the games data.")
             return
 
@@ -1288,16 +1292,17 @@ class NFL(callbacks.Plugin):
         else:
             games = [item['games'] for item in games if item['weekName'] == currentWeekName]
             weekOutput = currentWeekName
-
-        append_list = []
-
-        for games in games:
-            for t in games:
+        # container for output.
+        gamesweek = {}
+        # iterate over the games.
+        for game in games:
+            for t in game:
                 awayTeam = self._translateTeam('team', 'nid', t['awayTeamId'])
                 homeTeam = self._translateTeam('team', 'nid', t['homeTeamId'])
-                append_list.append("[{0}] {1}@{2} {3}".format(t['date']['num'], awayTeam, homeTeam, t['date']['time']))
-
-        output = "{0} :: {1}".format(self._bold(weekOutput), " | ".join([item for item in append_list]))
+                # teamdict.setdefault(pick_team, []).append(appendString)
+                gamesweek.setdefault(t['date']['num'], []).append("{0}@{1} {2}".format(awayTeam, homeTeam, t['date']['time']))
+        # now output.
+        output = "{0} :: {1}".format(self._bu(weekOutput), " || ".join([self._bold("[" + k + "]") + " " + " | ".join([i for i in v]) for (k, v) in gamesweek.items()]))
         irc.reply(output)
 
     nflweek = wrap(nflweek, [(getopts({'pre':''})), optional('somethingWithoutSpaces')])
