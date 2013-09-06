@@ -127,7 +127,8 @@ class NFL(callbacks.Plugin):
             if h and d:
                 page = utils.web.getUrl(url, headers=h, data=d)
             else:
-                page = utils.web.getUrl(url)
+                h = {"User-Agent":"Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:17.0) Gecko/20100101 Firefox/17.0"}
+                page = utils.web.getUrl(url, headers=h)
             return page
         except utils.web.Error as e:
             self.log.error("ERROR opening {0} message: {1}".format(url, e))
@@ -2274,21 +2275,21 @@ class NFL(callbacks.Plugin):
         if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
+        # fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9jb2FjaGVz')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
+        # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         div = soup.find('div', attrs={'id': 'my-players-table'})
         table = div.find('table', attrs={'class': 'tablehead'})
         rows = table.findAll('tr', attrs={'class': re.compile('(odd|even)row')})
-
+        # container for output.
         coachlist = collections.defaultdict(list)
-
+        # iterate over each row.
         for row in rows:
             tds = row.findAll('td')
             coach = tds[0].getText().replace("  "," ")
@@ -2297,11 +2298,11 @@ class NFL(callbacks.Plugin):
             team = self._translateTeam('team', 'full', team.strip())
             coachlist[str(team)] = "{0}({1})".format(coach, exp)
 
-        output = coachlist.get(str(optteam), None)
-        if not output:
+        output = coachlist.get(str(optteam))
+        if not output:  # didn't found.
             irc.reply("ERROR: Something went horribly wrong looking up the coach for {0}.".format(optteam))
             return
-        else:
+        else:  # found.
             irc.reply("The NFL coach for {0} is {1}".format(self._red(optteam), output))
 
     nflcoach = wrap(nflcoach, [('somethingWithoutSpaces')])
@@ -2326,10 +2327,10 @@ class NFL(callbacks.Plugin):
             return
         # iterate through and output.
         for article in jsondata[0:6]:
-            title = article.get('title', None)
-            # desc = article.get('description', None)
-            link = article.get('linkURL', None)
-            # date = article.get('date_ago', None)
+            title = article.get('title')
+            # desc = article.get('description')
+            link = article.get('linkURL')
+            # date = article.get('date_ago')
             if title and link:
                 irc.reply("{0} - {1}".format(self._bold(title), self._shortenUrl(link)))
 
@@ -2341,6 +2342,7 @@ class NFL(callbacks.Plugin):
 
     def nflplayers(self, irc, msg, args, optlist, optname):
         """<player>
+
         Search and find NFL players. Must enter exact/approx name since no fuzzy matching is done here.
         Ex: Tom Brady
         """
@@ -2380,6 +2382,7 @@ class NFL(callbacks.Plugin):
 
     def nflplayernews(self, irc, msg, args, optplayer):
         """<player>
+
         Display latest news for NFL player.
         Ex: Tom Brady
         """
@@ -2461,6 +2464,7 @@ class NFL(callbacks.Plugin):
 
     def nflinfo(self, irc, msg, args, optplayer):
         """<player>
+
         Display basic information on NFL player.
         Ex: Tom Brady
         """
@@ -2504,7 +2508,8 @@ class NFL(callbacks.Plugin):
 
     def nflcontract(self, irc, msg, args, optplayer):
         """<player>
-        Display NFL contract for Player Name.
+
+        Display NFL contract for player.
         Ex: Tom Brady
         """
 
@@ -2541,7 +2546,8 @@ class NFL(callbacks.Plugin):
 
     def nflgame(self, irc, msg, args, optplayer):
         """<player>
-        Display NFL player's game log for current/active game.
+
+        Display NFL player's game log for current/active/previous game.
         Ex: Eli Manning
         """
 
@@ -2582,13 +2588,36 @@ class NFL(callbacks.Plugin):
         output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
         if gameTime:
             irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(optplayer.title()), output, gameTime.getText(), gameTimeSpan.getText()))
-        else:
+        else:  # no gametime.
             irc.reply("{0} :: {1}".format(self._red(optplayer.title()), output))
 
     nflgame = wrap(nflgame, [('text')])
 
+    def _postostats(self, pos):
+        """What to look for with each position. For nflcareerstats and nflseason."""
+
+        table = {
+            'QB': ['passing', 'rushing'],
+            'RB': ['rushing', 'receiving'],
+            'FB': ['rushing', 'receiving'],
+            'WR': ['receiving', 'rushing'],
+            'TE': ['receiving', 'rushing'],
+            'DE': ['defensive'],
+            'DT': ['defensive'],
+            'LB': ['defensive'],
+            'CB': ['defensive'],
+            'S': ['defensive'],
+            'PK': ['kicking'],
+            'P': ['punting'] }
+        # now work with the table.
+        if pos in table:
+            return table[pos]
+        else:  # not in table.
+            return None
+
     def nflcareerstats(self, irc, msg, args, optplayer):
         """<player>
+
         Look up NFL career stats for a player.
         Ex: Tom Brady
         """
@@ -2613,41 +2642,39 @@ class NFL(callbacks.Plugin):
             irc.reply("No stats available for: {0}. Perhaps they play a position without formal stats?".format(optplayer))
             return
         # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         if not soup.find('a', attrs={'class': 'btn-split-btn'}): # check if player is active.
-            irc.reply("Cannot find any career stats for an inactive/unsigned player: %s" % optplayer)
+            irc.reply("ERROR: Cannot find any career stats for an inactive/unsigned player: %s" % optplayer)
             return
         # experience.
         exp = soup.find('span', text="Experience")
         if exp:
             exp = exp.findParent('li')
             exp.span.extract()
-        # position
-        pos = soup.find('ul', attrs={'class': 'general-info'}).find('li', attrs={'class': 'first'}).getText().upper()
-        pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])
+            exp = exp.getText()
+        else:  # didn't find it.
+            exp = "None."
+        # position. make sure we have it.
+        pos = soup.find('ul', attrs={'class': 'general-info'})
+        if pos:  # we found it.
+            pos = pos.find('li', attrs={'class': 'first'})
+            if pos:  # we found the second part.
+                pos = pos.getText().upper()  # get text and go upper.
+                pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])  # iffy but works.
+            else:  # something went wrong. Check formatting?
+                irc.reply("ERROR: I could not find player's position. Check formatting.")
+                return
+        else:  # something went wrong. Check formatting?
+            irc.reply("ERROR: I could not find player's position. Check formatting.")
+            return
         # basics.
         playername = soup.find('a', attrs={'class': 'btn-split-btn'}).getText().strip()
         article = soup.find('div', attrs={'class': 'article'})
         divs = article.findAll('table', attrs={'class': 'tablehead'})  # each one.
-        # what to look for with each position
-        postostats = {
-            'QB': ['passing', 'rushing'],
-            'RB': ['rushing', 'receiving'],
-            'FB': ['rushing', 'receiving'],
-            'WR': ['receiving', 'rushing'],
-            'TE': ['receiving', 'rushing'],
-            'DE': ['defensive'],
-            'DT': ['defensive'],
-            'LB': ['defensive'],
-            'CB': ['defensive'],
-            'S': ['defensive'],
-            'PK': ['kicking'],
-            'P': ['punting']
-        }
         # prepare dicts for output
         stats = {}  # holds the actual stats
         statcategories = {}  # holds the categories.
-        # expanded careerstats.
+        # expanded careerstats. something can go wrong here but we'll fix when something goes wrong.
         for f, div in enumerate(divs):
             if div.find('tr', attrs={'class': 'colhead'}):
                 if not div.find('tr', attrs={'class': 'total'}, text="There are no stats available."):
@@ -2656,27 +2683,32 @@ class NFL(callbacks.Plugin):
                     totals = div.find('tr', attrs={'class': 'total'}).findAll('td')[1:]
                     tmplist = []
                     for i, total in enumerate(totals):
-                        tmplist.append(ircutils.bold(colhead[i+1].getText()) + ": " + total.getText())
+                        tmplist.append(self._bold(colhead[i+1].getText()) + ": " + total.getText())
                     stats[int(f)] = tmplist
                     statcategories[str(stathead.getText().replace('Stats', '').strip().lower())] = f
         # prepare output string.
-        output = []
-        if pos in postostats:  # if we want specific stats.
-            for each in postostats[pos]:
-                if statcategories.has_key(each):
-                    output.append("{0}: {1}".format(self._ul(each.title()), " | ".join(stats.get(statcategories[each]))))
-        else:
-            output.append("No stats for the {0} position.".format(pos))
-        # now output.
-        if exp:  # if we have exp.
-            irc.reply("{0}({1} exp) career stats :: {2}".format(self._red(playername), exp.getText()," || ".join(output)))
-        else:  # no exp.
-            irc.reply("{0} career stats :: {1}".format(self._red(playername), " || ".join(output)))
+        careerstats = {}
+        # grab the stat categories for this position.
+        statcats = self._postostats(pos)
+        if not statcats:  # something went wrong.
+            irc.reply("ERROR: I don't know what categories to fetch for the {0} category. Check formatting.".format(pos))
+            return
+        # we're good so lets process.
+        for each in statcats:  # iterate over what we get back.
+            if each in statcategories:
+                careerstats[each.title()] = " | ".join(stats.get(statcategories[each]))
+        # something went wrong finding those stats.
+        if len(careerstats) == 0:
+            irc.reply("ERROR: I could not find {0} stats for {1}. Check formatting?".format(" ,".join(statcats), playername))
+            return
+        # everything went ok. now output.
+        irc.reply("{0}({1} exp) career stats :: {2}".format(self._red(playername), exp, " || ".join([self._ul(k) + " " + v for (k, v) in careerstats.items()])))
 
     nflcareerstats = wrap(nflcareerstats, [('text')])
 
     def nflseason(self, irc, msg, args, optlist, optplayer):
         """[--year DDDD] <player>
+
         Look up NFL Season stats for a player.
         To look up a different year, use --year YYYY.
         Ex: Tom Brady or --year 2010 Tom Brady
@@ -2726,23 +2758,50 @@ class NFL(callbacks.Plugin):
         if not soup.find('a', attrs={'class':'btn-split-btn'}):  # check if player is active.
             irc.reply("ERROR: Cannot find any season stats for an inactive/unsigned player: {0}".format(optplayer))
             return
+        # basics.
         playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
-        table = soup.find('table', attrs={'class':'tablehead'})  # first table.
-        headings = table.findAll('tr', attrs={'class':'colhead'})
-        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow|^evenrow')})
-        # create a list of seasons.
-        seasonlist = [str(i.find('td').string) for i in rows]  # cheap list to find the index for a year.
-        if season in seasonlist:
-            yearindex = seasonlist.index(season)
-        else:  # no stats for that year.
-            irc.reply("ERROR: No season stats found for: {0} in {1}".format(playername, season))
+        # position. make sure we have it.
+        pos = soup.find('ul', attrs={'class': 'general-info'})
+        if pos:  # we found it.
+            pos = pos.find('li', attrs={'class': 'first'})
+            if pos:  # we found the second part.
+                pos = pos.getText().upper()  # get text and go upper.
+                pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])  # iffy but works.
+            else:  # something went wrong. Check formatting?
+                irc.reply("ERROR: I could not find {0} position. Check formatting.".format(playername))
+                return
+        else:  # something went wrong. Check formatting?
+            irc.reply("ERROR: I could not find {0} position. Check formatting.".format(playername))
             return
-        # we did find the stats for year. prepare for output.
-        heading = headings[0].findAll('td')  # first table, first row is the heading.
-        row = rows[yearindex].findAll('td')  # the year comes with the index number, which we find above.
-        # now output.
-        output = ' | '.join([self._bold(each.text) + ": " + row[i].text for i, each in enumerate(heading)])
-        irc.reply("{0} :: {1}".format(self._red(playername), output))
+        # grab the stat categories for this position.
+        statcats = self._postostats(pos)
+        if not statcats:  # something went wrong.
+            irc.reply("ERROR: I don't know what categories to fetch for the {0} category. Check formatting.".format(pos))
+            return
+        # container for output.
+        stats = collections.defaultdict(dict)
+        # find the divs in the html with stats.
+        divs = soup.findAll('div', attrs={'class':'mod-container mod-table mod-player-stats'})
+        for div in divs:  # iterate over
+            #t = collections.defaultdict(dict)
+            stattype = div.find('tr', attrs={'class':'stathead'}).getText().lower().replace(' stats', '')  # stattype.
+            if stattype in statcats:
+                table = div.find('table', attrs={'class':'tablehead'})  # table in each.
+                headings = table.find('tr', attrs={'class':'colhead'}).findAll('td') # headings in each table
+                rows = table.findAll('tr', attrs={'class': re.compile('^oddrow|^evenrow')})  # each row is a year.
+                for row in rows:  # iterate over each row (season)
+                    tds = row.findAll('td')  # grab tds to process.
+                    year = tds[0].getText()  # first row = year
+                    if year == season:  # only grab stats for the year we need. +1 so we don't reprint the season.
+                        yearstats = [self._bold(headings[i+1].getText()) + ": " + n.getText() for (i, n) in enumerate(tds[1:])]
+                        stats[stattype] = yearstats  # inject.
+        # output.
+        if len(stats) == 0:  # this means we didn't find something above. Could be buggy but it's quick.
+            irc.reply("ERROR: I could not find stats in year {0} for {1}".format(season, playername))
+            return
+        # we're good. we found stats. lets print them.
+        output = " || ".join([self._bu(k.title()) + ": " + " ".join([i for i in v]) for (k, v) in stats.items()])
+        irc.reply("{0} :: {1} SEASON :: {2}".format(self._red(playername), season, output))
 
     nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
 
