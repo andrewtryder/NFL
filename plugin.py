@@ -1251,7 +1251,9 @@ class NFL(callbacks.Plugin):
                         irc.reply("ERROR: Week must be between 1-17")
                         return
 
-        html = self._httpget('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsU2NoZWR1bGUuanM=')
+        # now do our http fetch.
+        url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsU2NoZWR1bGUuanM=')
+        html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
