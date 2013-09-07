@@ -1481,57 +1481,6 @@ class NFL(callbacks.Plugin):
 
     nflcoachingstaff = wrap(nflcoachingstaff, [('somethingWithoutSpaces')])
 
-    def nfldepthchart(self, irc, msg, args, optteam, opttype):
-        """<team> <offense|defense|special>
-        Display team's depth chart for unit.
-        Ex: NYJ offense
-        """
-
-        # test for valid teams.
-        optteam = self._validteams(optteam)
-        if not optteam: # team is not found in aliases or validteams.
-            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
-            return
-        # check the type (o/d/s)
-        opttype = opttype.lower()
-        if opttype not in ('offense', 'defense', 'special'):
-            irc.reply("ERROR: Type must be offense, defense or special.")
-            return
-        # build and fetch url.
-        lookupteam = self._translateTeam('yahoo', 'team', optteam)
-        url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/depthchart?nfl-pos=%s' % (lookupteam, opttype)
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        if opttype == "offense":
-            h4 = soup.find('h4', text="Offensive Depth Chart")
-        elif opttype == "defense":
-            h4 = soup.find('h4', text="Defensive Depth Chart")
-        elif opttype == "special":
-            h4 = soup.find('h4', text="Special Teams Depth Chart")
-        else:
-            irc.reply("ERROR: Something broke trying to find depthchart.")
-            return
-
-        table = h4.findNext('table').find('tbody')
-        rows = table.findAll('tr')
-
-        depthchart = []
-
-        for row in rows:
-            position = row.find('th', attrs={'class':'title'}).getText().strip()
-            players = row.findAll('td', attrs={'class':'title'})
-            depthchart.append("{0} :: {1}".format(self._ul(position), " | ".join([item.find('a').text for item in players])))
-
-        for splice in self._splicegen('380', depthchart):
-            irc.reply(" | ".join([depthchart[item] for item in splice]))
-
-    nfldepthchart = wrap(nfldepthchart, [('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
-
     def nflroster(self, irc, msg, args, optteam, optposition):
         """<team> <position/#>
         Display team roster by position group or person matching #.
