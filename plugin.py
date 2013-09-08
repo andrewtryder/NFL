@@ -2530,15 +2530,19 @@ class NFL(callbacks.Plugin):
         # now process html for actual gamestats.
         div = h4.findParent('div').findParent('div')
         gameTime = False
+        # find the playername
+        playerName = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'}).find('h1')
+        # team, number and position.
+        playerTeam = soup.find('div', attrs={'class':'player-bio'}).find('ul', attrs={'class':'general-info'}).find('li', attrs={'class':'last'})
         table = div.find('table', attrs={'class':'tablehead'})
         header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
         row = table.findAll('tr')[1].findAll('td')[1:]
         # output.
         output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
         if gameTime:
-            irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(optplayer.title()), output, gameTime.getText(), gameTimeSpan.getText()))
+            irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(playerName.getText()), output, gameTime.getText(), gameTimeSpan.getText()))
         else:  # no gametime.
-            irc.reply("{0} :: {1}".format(self._red(optplayer.title()), output))
+            irc.reply("{0} ({1}) :: {2}".format(self._red(playerName.getText()), playerTeam.getText(), output))
 
     nflgame = wrap(nflgame, [('text')])
 
