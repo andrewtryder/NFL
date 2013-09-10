@@ -95,7 +95,6 @@ INSERT INTO nflteamaliases (team, teamalias) values ('JAC','jags');
 INSERT INTO nflteamaliases (team, teamalias) values ('JAC','jaguars');
 INSERT INTO nflteamaliases (team, teamalias) values ('KC','chiefs');
 INSERT INTO nflteamaliases (team, teamalias) values ('MIA','miami');
-INSERT INTO nflteamaliases (team, teamalias) values ('MIA','dolphins');
 INSERT INTO nflteamaliases (team, teamalias) values ('MIA','fins');
 INSERT INTO nflteamaliases (team, teamalias) values ('MIN','vikings');
 INSERT INTO nflteamaliases (team, teamalias) values ('NE','nep');
