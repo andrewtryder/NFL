@@ -1483,8 +1483,8 @@ class NFL(callbacks.Plugin):
 
     def nflroster(self, irc, msg, args, optteam, optposition):
         """<team> <position/#>
-        Display team roster by position group or person matching #.
-        Position must be one of: QB, RB, WR, TE, OL, DL, LB, SD, ST
+
+        Display who on a team matches #jersey number or <position>.
         Ex: nflroster NE QB (all QBs on NE) or NFL NE 12 (NE roster #12)
         """
 
@@ -1493,30 +1493,17 @@ class NFL(callbacks.Plugin):
         if not optteam: # team is not found in aliases or validteams.
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
-
-        lookupteam = self._translateTeam('yahoo', 'team', optteam)
-
+        # setup the defaults.
+        lookupteam = optteam
         useNum = True
-        validpositions = {
-                    'QB':'Quarterbacks',
-                    'RB':'Running Backs',
-                    'WR':'Wide Receivers/Tight Ends',
-                    'TE':'Wide Receivers/Tight Ends',
-                    'OL':'Offensive Line',
-                    'DL':'Defensive Line',
-                    'LB':'Linebackers',
-                    'SD':'Secondary',
-                    'ST':'Special Teams' }
-
         optposition = optposition.replace('#','') # remove # infront of # if there.
         if not optposition.isdigit(): # if we are not a digit, check if we're in valid positions.
             useNum = False
-            optposition = optposition.upper()  # upper so we can match keys.
-            if optposition not in validpositions:
-                irc.reply("ERROR: When looking up position groups, it must be one of: {0}".format(" | ".join(sorted(validpositions.keys()))))
-                return
+            optposition = optposition.upper()
 
-        url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/roster' % lookupteam
+        # build and fetch url
+        url = 'http://espn.go.com/nfl/team/roster/_/name/%s/' % lookupteam
+        # url = self._b64decode('') + '/%s' % lookupteam
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
@@ -1525,34 +1512,30 @@ class NFL(callbacks.Plugin):
 
         # process html
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        tbodys = soup.findAll('tbody')[1:]  #skip search header.
-
+        div = soup.find('div', attrs={'id':'my-players-table'})
         # setup defaultdicts for output.
         nflroster = collections.defaultdict(list)
         positiongroups = collections.defaultdict(list)
-
-        for tbody in tbodys:
-            rows = tbody.findAll('tr')
-            for row in rows:
-                number = row.find('td')
-                # playertype = row.findPrevious('h5')
-                player = number.findNext('th', attrs={'class':'title'}).findNext('a')
-                position = number.findNext('td')
-                # height = position.findNext('td')
-                # weight = height.findNext('td')
-                # age = weight.findNext('td')
-                # exp = age.findNext('td')
-                group = row.findPrevious('caption')
-                nflroster[str(number.getText())].append("{0} ({1})".format(player.getText(), position.getText()))
-                positiongroups[str(group.getText())].append("#{0} {1}".format(number.getText(), player.getText()))
-
+        # find the rows.
+        rows = div.findAll('tr', attrs={'class':re.compile('^oddrow.*?|^evenrow.*?')})
+        for row in rows:
+            tds = row.findAll('td')
+            number = tds[0].getText()
+            player = tds[1].getText()
+            position = tds[2].getText()
+            nflroster[number].append("{0} ({1})".format(player, position))
+            positiongroups[position].append("#{0} {1}".format(number, player))
+        # prepare output.
         if useNum:
-            if nflroster.has_key(str(optposition)):
-                output = "{0} #{1} is: {2}".format(self._red(optteam), self._bold(optposition), "".join(nflroster.get(str(optposition))))
+            if optposition in nflroster:
+                output = "{0} #{1} is: {2}".format(self._red(optteam), self._bold(optposition), "".join(nflroster.get(optposition)))
             else:
                 output = "I did not find a person matching number: {0} on {1}".format(optposition, optteam)
         else:
-            output = "{0} on {1} :: {2}".format(self._bold(optposition), self._red(optteam), " | ".join(positiongroups.get(str(validpositions[optposition]))))
+            if optposition in positiongroups:
+                output = "{0} on {1} :: {2}".format(self._bold(optposition), self._red(optteam), " | ".join(positiongroups.get(optposition)))
+            else:
+                output = "I did not find any at the position on {0} position :: Valid positions on {1}'s roster: {2}".format(optposition, optteam, " | ".join(sorted(positiongroups.keys())))
 
         irc.reply("{0}".format(output))
 
@@ -2759,23 +2742,33 @@ class NFL(callbacks.Plugin):
     nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
 
     def nflgamelog(self, irc, msg, args, optlist, optplayer):
-        """[--game #] <player>
-        Display gamelogs from previous # of games. Ex: Tom Brady
+        """[--year DDDD | --game #] <player>
+
+        Display gamelog from previous or specific game.
+        If --game # is not specified, it tries to print the last gamelog.
+        If --year #### is not specified, it defaults to the current NFL year.
+        Ex: Tom Brady OR --game 2 Eli Manning OR --year 2012 --game 2 Eli Manning
         """
 
-        # handle getopts
-        optgames = "1"
+        # define variables.
+        optgame, optyear = False, None
+        # handle getopts (optlist)
         if optlist:
             for (key, value) in optlist:
                 if key == 'year':  # year, test, optdate if true
                     testdate = self._validate(value, '%Y')
                     if not testdate:
-                        irc.reply("Invalid year. Must be YYYY.")
+                        irc.reply("ERROR: Invalid year. Must be YYYY.")
                         return
                     else:
-                        url += 'year/%s' % value
-                if key == 'games':  # how many games?
-                    optgames = value
+                        optyear = value #url += 'year/%s' % value
+                if key == 'game':  # what game?
+                    if not 1 <= int(value) <= 21:  # 1->21
+                        irc.reply("ERROR: '{0}' is an invalid game. Must be between 1-21.".format(value))
+                        return
+                    else:  # game was good.
+                        optgame = value
+
         # now lookup the player.
         if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
             lookupid = optplayer  # if it is, set.
@@ -2785,12 +2778,20 @@ class NFL(callbacks.Plugin):
                 related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
                 irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
+
         # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lk') + '/%s/' % lookupid
+        if optyear:  # if we have optyear from above:
+            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lkLw==') + '%s/year/%s/' % (lookupid, str(optyear))
+        else:
+            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lkLw==') + '%s/' % (lookupid)
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
+            return
+        # first, a sanity check.
+        if 'No stats available.' in html:
+            irc.reply("ERROR: Something broke loading stats for: {0}. Check to make sure year is correct or formatting did not change.".format(optplayer))
             return
         # process html. put some additional error checks in because it can be iffy.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
@@ -2800,7 +2801,7 @@ class NFL(callbacks.Plugin):
             return
         table = div.find('table', attrs={'class':'tablehead'})
         if not table:  # second check.
-            irc.reply("Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
+            irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
             return
         stathead = table.find('tr', attrs={'class':'stathead'}).findAll('td')
         header = table.find('tr', attrs={'class':'colhead'}).findAll('td')
@@ -2820,50 +2821,57 @@ class NFL(callbacks.Plugin):
         for e, blah in enumerate(stathead):
             tmpdict = {}
             tmpdict[str(blah['colspan'])] = str(blah.text)
-            statheaddict[int(e)] = tmpdict
+            statheaddict[e] = tmpdict
+        self.log.info("statheaddict: {0}".format(statheaddict))
         # now, we have the statheadlist, create statheadlist to be the list of
         # each header[i] colspan element, where you can use its index value to ref.
         # so, if header[i] = QBR, the "parent" td colspan is PASSING.
         # ex: ['2012 REGULAR SEASON GAME LOG', '2012 REGULAR SEASON GAME LOG',
         # '2012 REGULAR SEASON GAME LOG', 'PASSING', 'PASSING', ... 'RUSHING'
         statheadlist = []
-        for q,x in sorted(statheaddict.items()):  # sorted dict, x is the "dict" inside.
-            for k,v in x.items():  # key = colspan, v = the td parent header
+        for q, x in sorted(statheaddict.items()):  # sorted dict, x is the "dict" inside.
+            for k, v in x.items():  # key = colspan, v = the td parent header
                 for each in range(int(k)):  # range the number to insert.
                     # do some replacement (truncating) because we use this in output.
-                    v = v.replace('PASSING','PASS').replace('RUSHING','RUSH').replace('PUNTING','PUNT')
+                    v = v.replace('PASSING','PASS').replace('RUSHING','RUSH').replace('PUNTING','PUNT-')
                     v = v.replace('RECEIVING','REC').replace('FUMBLES','FUM').replace('TACKLES','TACK')
                     v = v.replace('INTERCEPTIONS','INT').replace('FIELD GOALS','FG').replace('PATS','XP')
-                    v = v.replace('PUNTING','PUNT-')
-                    statheadlist.append(v)
+                    statheadlist.append(v)  # add to list.
         # now, we put all of the data into a data structure
-        gamelist = {}  # gamelist dict. one game per entry.
-        for i, row in enumerate(rows):  # go through each row and extract, mate with header.
-            d = collections.OrderedDict()  # everything in an OD for calc/sort later.
+        gamelist, games = {}, {}  # gamelist dict. one game per entry. games contains a list incase there is an error.
+        # go through each row and extract, mate with header.
+        for i, row in enumerate(rows):
+            d = {}  # everything in an OD for calc/sort later.
             tds = row.findAll('td')  # all td in each row.
-            d['WEEK'] = str(i+1)  # add in the week but +1 for human reference later.
+            week = i+1  # add in the week but +1 for human reference later.
             for f,td in enumerate(tds):  # within each round, there are tds w/data.
                 if f > 2:  # the first three will be game log parts, so append statheadlist from above.
                     if str(statheadlist[f]) == str(header[f].getText()):  # check if key is there like INT so we don't double include
-                        d[str(header[f].getText())] = str(td.getText())  # this will just look normal like XPM or INT
+                        d[header[f].getText()] = td.getText()  # this will just look normal like XPM or INT
                     else:  # regular "addtiion" where it is something like FUM-FF
-                        d[str(statheadlist[f] + "-" + header[f].getText())] = str(td.getText())
+                        d[statheadlist[f] + "-" + header[f].getText()] = td.getText()
                 else:  # td entries 2 and under like DATE, OPP, RESULT
-                    d[str(header[f].getText())] = str(td.getText())  # inject all into the OD.
-            gamelist[int(i)] = d  # finally, each game and its data in OD now injected into object_list.
+                    d[header[f].getText()] = td.getText()  # inject all into the OD.
+            # we also add into games so we can print to the user a list of games we have.
+            games[week] = tds[1].getText()
+            # finally, each game and its data in OD now injected into object_list.
+            gamelist[week] = d
+
+        # find optgame if we don't have it.
+        if not optgame:
+            optgame = max(games.keys())  # highest number (or last game)
         # output time.
-        outputgame = gamelist.get(int(optgames))
+        outputgame = gamelist.get(optgame)
         if not outputgame:  # handle finding the game or not for output.
-            irc.reply("ERROR: I did not find game number {0} in {1}.".format(optgames, selectedyear.getText()))
+            g = " | ".join([str(k) + ": " + v for (k, v) in sorted(games.items())])
+            irc.reply("ERROR: I did not find game number {0} in {1}. I do have: {2}".format(optgame, selectedyear.getText(), g))
             return
         else:  # we did find an outputgame, so go out.
-            output = ""  # populate the string iterating through items.
-            for k, v in outputgame.items():
-                output += "{0}: {1} | ".format(self._bold(k), v)
+            output = " | ".join([self._bold(z) + ": " + x for (z, x) in sorted(outputgame.items())])
             # finally output on irc.
-            irc.reply(output)
+            irc.reply("{0} :: W{1} :: {2}".format(self._red(optplayer), optgame, output))
 
-    nflgamelog = wrap(nflgamelog, [getopts({'year':('somethingWithoutSpaces'), 'games':('somethingWithoutSpaces')}), ('text')])
+    nflgamelog = wrap(nflgamelog, [getopts({'year':('int'), 'game':('int')}), ('text')])
 
 Class = NFL
 
