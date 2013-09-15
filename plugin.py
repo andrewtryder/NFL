@@ -2294,7 +2294,6 @@ class NFL(callbacks.Plugin):
         games = {}
         # process games
         for div in divs:
-            self.log.info("DIV: {0}".format(div))
             gameid = div['id'].replace('-gameContainer', '')
             # p id="330915001-aNameOffset"
             ateam = div.find('p', attrs={'id':'%s-aNameOffset' % gameid})
@@ -2314,7 +2313,7 @@ class NFL(callbacks.Plugin):
             return
 
         # build and fetch url.
-        url = self._b64decode('aHR0cDovL3Njb3Jlcy5lc3BuLmdvLmNvbS9uY2YvYm94c2NvcmU/Z2FtZUlkPQ==') + '%s' % (gid)
+        url = self._b64decode('aHR0cDovL3Njb3Jlcy5lc3BuLmdvLmNvbS9uZmwvYm94c2NvcmU/Z2FtZUlkPQ==') + '%s' % (gid)
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
@@ -2329,7 +2328,7 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         tsh4 = soup.find('h4', text="Team Stat Comparison")
         if not tsh4:  # sanity check.
-            irc.reply("ERROR: Something went wrong finding Team Stats in gameid: {0}".format(gid))
+            irc.reply("ERROR: Something went wrong finding Team Stats in gameid: {0}. Checking too early?".format(gid))
             return
         # we find teamstats here.
         tscontent = tsh4.findNext('table', attrs={'class':'mod-data'})  # table for teamstats.
