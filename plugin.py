@@ -2346,9 +2346,6 @@ class NFL(callbacks.Plugin):
             stat = stat.replace('Passing', 'Pass').replace('Rushing', 'Rush').replace('penalties', 'pen').replace('efficiency', 'eff').replace('Interceptions', 'Int')
             stat = stat.replace('Yards per pass', 'YPP').replace('Red Zone', 'RZ').replace('Turnovers', 'TO').replace('Fumbles', 'Fum').replace('Penalties', 'Pen').replace('downs', 'd')
             stat = stat.replace('Downs', 'D').replace('Attempts', 'Att').replace('Yards', 'Yds')
-            # 13:53:19 <NFLNews> Washington :: 1st Downs: 2 | Passing 1st downs: 2 | Rushing 1st downs: 0 | 1st downs from penalties: 0 | 3rd down efficiency: 0-3 | 4th down efficiency: 0-0 | Total Plays: 11 | Total Yards:
-            # 70 | Yards per play: - | Total Drives: - | Passing: 60 | Comp-Att: 3-6 | Yards per pass: 10.0 | Interceptions thrown: 0 | Sacks-Yards Lost: 0-0 | Rushing: 10 | Rushing Attempts: 5 | (1 more
-            # Yards per rush: 2.0 | Red Zone (Made-Att): 0-0 | Penalties: 3-27 | Turnovers: 0 | Fumbles lost: 0 | Interceptions thrown: 0 | Possession: 5:25
             tsstats[teams[0]].append("{0}: {1}".format(stat, tds[1].getText()))  # inject away stats.
             tsstats[teams[1]].append("{0}: {1}".format(stat, tds[2].getText()))  # inject home stats.
         # now we prepare to output.
