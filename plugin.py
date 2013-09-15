@@ -2268,6 +2268,89 @@ class NFL(callbacks.Plugin):
 
     nflnews = wrap(nflnews)
 
+    def nflgamestats(self, irc, msg, args, optteam):
+        """<team>
+
+        Fetch live or previous game stats for team.
+        Use exact or near exact team name.
+        Ex: Patriots OR Rams OR Falcons
+        """
+
+        url = self._b64decode('aHR0cDovL3Njb3Jlcy5lc3BuLmdvLmNvbS9uZmwvc2NvcmVib2FyZA==')
+        # build and fetch url.
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+            # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        divs = soup.findAll('div', attrs={'id':re.compile('^\d+-gameContainer')})
+        # check to make sure we found games.
+        if len(divs) == 0:
+            irc.reply("ERROR: Something went wrong trying to find games on page. Formatting change?")
+            return
+        # container to match our games.
+        games = {}
+        # process games
+        for div in divs:
+            self.log.info("DIV: {0}".format(div))
+            gameid = div['id'].replace('-gameContainer', '')
+            # p id="330915001-aNameOffset"
+            ateam = div.find('p', attrs={'id':'%s-aNameOffset' % gameid})
+            hteam = div.find('p', attrs={'id':'%s-hNameOffset' % gameid})
+            # clean-up the names for better matching.
+            ateam = ateam.getText().lower().strip().replace('&amp;', '&').replace('.', '')
+            hteam = hteam.getText().lower().strip().replace('&amp;', '&').replace('.', '')
+            games[ateam] = gameid  # inject away
+            games[hteam] = gameid  # inject home.
+
+        # we must match input (teamname) with a gameid.
+        if optteam.lower() in games:
+            gid = games[optteam.lower()]
+        else:
+            output = " | ".join(sorted(games.keys()))
+            irc.reply("ERROR: I did not find any games with team: {0} in it. I do have: {1}".format(optteam, output))
+            return
+
+        # build and fetch url.
+        url = self._b64decode('aHR0cDovL3Njb3Jlcy5lc3BuLmdvLmNvbS9uY2YvYm94c2NvcmU/Z2FtZUlkPQ==') + '%s' % (gid)
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+
+        # sanity check before we process.
+        if 'Box score not currently available.' in html:
+            irc.reply("ERROR: Box score is currently unavailable at: {0} . Checking too early?".format(url))
+            return
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        tsh4 = soup.find('h4', text="Team Stat Comparison")
+        if not tsh4:  # sanity check.
+            irc.reply("ERROR: Something went wrong finding Team Stats in gameid: {0}".format(gid))
+            return
+        # we find teamstats here.
+        tscontent = tsh4.findNext('table', attrs={'class':'mod-data'})  # table for teamstats.
+        tshead = tscontent.find('thead')  # find the thead.
+        tsteams = tshead.findAll('th', attrs={'nowrap':'nowrap'})  # find the 2x TH with teams.
+        teams = {}  # teams container
+        for i, tsteam in enumerate(tsteams):  # iterate over these two.
+            teams[i] = tsteam.getText().replace('&amp;', '&')  # inject into the dict.
+        # now find the tbody with stats.
+        tsrows = tscontent.findAll('tr', attrs={'class':re.compile('odd|even')})
+        tsstats = collections.defaultdict(list)  # container for the stats.
+        for tsrow in tsrows:  # iterate over rows. each row has two tds.
+            tds = tsrow.findAll('td')  # find all tds. There should be three per row.
+            tsstats[teams[0]].append("{0}: {1}".format(self._bold(tds[0].getText()), tds[1].getText()))  # inject away stats.
+            tsstats[teams[1]].append("{0}: {1}".format(self._bold(tds[0].getText()), tds[2].getText()))  # inject home stats.
+        # now we prepare to output.
+        for (z, y) in tsstats.items():  # k = teamname, v = list of stats.
+            irc.reply("{0} :: {1}".format(self._red(z), " | ".join(y)))
+
+    nflgamestats = wrap(nflgamestats, [('text')])
+
     ########################################
     # NFL PLAYER DATABASE PUBLIC FUNCTIONS #
     ########################################
