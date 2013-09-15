@@ -2796,6 +2796,7 @@ class NFL(callbacks.Plugin):
         # process html. put some additional error checks in because it can be iffy.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         div = soup.find('div', attrs={'class':'mod-container mod-table mod-player-stats'})
+        # more sanity checks.
         if not div:  # one check.
             irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
             return
@@ -2803,6 +2804,8 @@ class NFL(callbacks.Plugin):
         if not table:  # second check.
             irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
             return
+        # we're good so lets grab our html.
+        playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
         stathead = table.find('tr', attrs={'class':'stathead'}).findAll('td')
         header = table.find('tr', attrs={'class':'colhead'}).findAll('td')
         rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
@@ -2822,7 +2825,6 @@ class NFL(callbacks.Plugin):
             tmpdict = {}
             tmpdict[str(blah['colspan'])] = str(blah.text)
             statheaddict[e] = tmpdict
-        self.log.info("statheaddict: {0}".format(statheaddict))
         # now, we have the statheadlist, create statheadlist to be the list of
         # each header[i] colspan element, where you can use its index value to ref.
         # so, if header[i] = QBR, the "parent" td colspan is PASSING.
@@ -2864,12 +2866,12 @@ class NFL(callbacks.Plugin):
         outputgame = gamelist.get(optgame)
         if not outputgame:  # handle finding the game or not for output.
             g = " | ".join([str(k) + ": " + v for (k, v) in sorted(games.items())])
-            irc.reply("ERROR: I did not find game number {0} in {1}. I do have: {2}".format(optgame, selectedyear.getText(), g))
+            irc.reply("ERROR: I did not find game number {0} in {1} for {2}. I do have: {3}".format(optgame, selectedyear.getText(), playername, g))
             return
         else:  # we did find an outputgame, so go out.
             output = " | ".join([self._bold(z) + ": " + x for (z, x) in sorted(outputgame.items())])
             # finally output on irc.
-            irc.reply("{0} :: W{1} :: {2}".format(self._red(optplayer), optgame, output))
+            irc.reply("{0} :: W{1} :: {2}".format(self._red(playername), optgame, output))
 
     nflgamelog = wrap(nflgamelog, [getopts({'year':('int'), 'game':('int')}), ('text')])
 
