@@ -2350,7 +2350,9 @@ class NFL(callbacks.Plugin):
             tsstats[teams[1]].append("{0}: {1}".format(stat, tds[2].getText()))  # inject home stats.
         # now we prepare to output.
         for (z, y) in tsstats.items():  # k = teamname, v = list of stats.
-            irc.reply("{0} :: {1}".format(self._red(z), " | ".join(y)))
+            #splitter = " "+self._red('|')+" "
+            output = " ".join(y)
+            irc.reply("{0} :: {1}".format(self._red(z), output))
 
     nflgamestats = wrap(nflgamestats, [('text')])
 
@@ -2604,6 +2606,11 @@ class NFL(callbacks.Plugin):
         # team, number and position.
         playerTeam = soup.find('div', attrs={'class':'player-bio'}).find('ul', attrs={'class':'general-info'}).find('li', attrs={'class':'last'})
         table = div.find('table', attrs={'class':'tablehead'})
+        # need another sanity check here..
+        if not table:
+            irc.reply("ERROR: I could not find any statistics for: {0}. Sure you typed in the right player?".format(playerName.getText()))
+            return
+        # we did find. Continue.
         header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
         row = table.findAll('tr')[1].findAll('td')[1:]
         # output.
