@@ -2343,16 +2343,23 @@ class NFL(callbacks.Plugin):
         for tsrow in tsrows:  # iterate over rows. each row has two tds.
             tds = tsrow.findAll('td')  # find all tds. There should be three per row.
             stat = tds[0].getText()  # statname. below, we shorten things.
-            stat = stat.replace('Passing', 'Pass').replace('Rushing', 'Rush').replace('penalties', 'pen').replace('efficiency', 'eff').replace('Interceptions', 'Int')
-            stat = stat.replace('Yards per pass', 'YPP').replace('Red Zone', 'RZ').replace('Turnovers', 'TO').replace('Fumbles', 'Fum').replace('Penalties', 'Pen').replace('downs', 'd')
-            stat = stat.replace('Downs', 'D').replace('Attempts', 'Att').replace('Yards', 'Yds')
-            tsstats[teams[0]].append("{0}: {1}".format(stat, tds[1].getText()))  # inject away stats.
-            tsstats[teams[1]].append("{0}: {1}".format(stat, tds[2].getText()))  # inject home stats.
+            # 1st Downs: 22 | Passing 1st downs: 12 | Rushing 1st downs: 8 | 1st downs from Penalties: 2 | 3rd down efficiency: 7-17 |
+            # 4th down efficiency: 0-1 | Total Plays: 79 | Total Yards: 407 | Yards per play: 5.2 | Total Drives: 12 | Passing: 280 |
+            # Comp - Att: 25-45 | Yards per pass: 6.2 | Interceptions thrown: 0 | Sacks - Yards Lost: 0-0 | Rushing: 127 | Rushing Attempts: 34 | Yards
+            # per rush: 3.7 | Red Zone (Made-Att): 1-2 | Penalties: 9-84 | Turnovers: 0 | Fumbles lost: 0 | Interceptions thrown: 0 |
+            # Defensive / Special Teams TDs: 0 | Possession: 35:34
+            stat = stat.replace('1st Downs', '1stD').replace('Passing 1st downs', 'Pass').replace('Rushing 1st downs', 'Rush').replace('1st downs from Penalties', 'Pen')
+            stat = stat.replace('3rd down efficiency', '3rdD EFF').replace('4th down efficiency', '4thD EFF').replace('Total Plays', 'Plys').replace('Total Yards', 'YDS')
+            stat = stat.replace('Yards per play', 'YPP').replace('Total Drives', 'Drvs').replace('Comp - Att', 'C-A').replace('Defensive / Special Teams TDs', 'D/ST TDs')
+            stat = stat.replace('Yards per pass', 'YPP').replace('Interceptions thrown', 'INT').replace('Sacks - Yards Lost', 'S-YL')
+            stat = stat.replace('Rushing Attempts', 'R-ATT').replace('Yards per rush', 'YPR').replace('Red Zone (Made-Att)', 'RZ (Made-Att)').replace('Penalties', 'PEN')
+            stat = stat.replace('Turnovers', 'TO').replace('Fumbles lost', 'Fum lst').replace('Intercceptions thrown', 'INT')
+            stat = stat.replace('Possession', 'TOP').replace('Passing', 'PASS').replace('Rushing', 'RUSH')
+            tsstats[teams[0]].append("{0}: {1}".format(self._bold(stat), tds[1].getText()))  # inject away stats. bold category.
+            tsstats[teams[1]].append("{0}: {1}".format(self._bold(stat), tds[2].getText()))  # inject home stats. bolc category.
         # now we prepare to output.
         for (z, y) in tsstats.items():  # k = teamname, v = list of stats.
-            #splitter = " "+self._red('|')+" "
-            output = " ".join(y)
-            irc.reply("{0} :: {1}".format(self._red(z), output))
+            irc.reply("{0} :: {1}".format(self._red(z), " | ".join(y)))
 
     nflgamestats = wrap(nflgamestats, [('text')])
 
