@@ -2505,7 +2505,7 @@ class NFL(callbacks.Plugin):
                 irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
         # build and fetch url.
-        url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcmluZm8=') + '?playerId=%s&wjb=' % lookupid
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZC8=') + '%s' % lookupid
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
@@ -2513,22 +2513,24 @@ class NFL(callbacks.Plugin):
             return
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        team = soup.find('td', attrs={'class': 'teamHeader'}).find('b')
-        playerName = soup.find('div', attrs={'class': 'sub bold'}).getText()
-        divs = soup.findAll('div', attrs={'class': re.compile('^ind tL$|^ind alt$|^ind$')})
-        # container to put all in.
-        append_list = []
-        # each row is a stat.
-        for div in divs:
-            bold = div.find('b')
-            if bold:
-                key = bold
-                bold.extract()
-                value = div
-                append_list.append("{0}: {1}".format(self._ul(key.getText()), value.getText()))
-        # output time.
-        descstring = " | ".join([item for item in append_list])
-        output = "{0} :: {1} :: {2}".format(self._red(playerName), self._bold(team.getText()), descstring)
+        # find the main div
+        div = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'})
+        playerName = div.find('h1')
+        # setup our output container with the name.
+        out = []
+        # basic stats.
+        stats = div.find('ul', attrs={'class':'general-info'})
+        for stat in stats:  # iterate over and add the text.
+            out.append(stat.getText())
+        # find the rest of the bio
+        bios = div.find('ul', attrs={'class':'player-metadata floatleft'}).findAll('li')
+        for bios in bios:
+            cat = bios.find('span')  # span is the category.
+            cat.extract()  # now extract the span because bios = rest of text we want.
+            out.append("{0}: {1}".format(cat.getText(), bios.getText()))
+        # prepare output.
+        descstring = " | ".join([item for item in out])
+        output = "{0} :: {1}".format(self._red(playerName.getText()), descstring)
         irc.reply(output)
 
     nflinfo = wrap(nflinfo, [('text')])
@@ -2605,9 +2607,12 @@ class NFL(callbacks.Plugin):
             if not h4:
                 irc.reply("ERROR: I could not find game statistics for: {0}. Player not playing? Also try nflgamelog command.".format(optplayer.title()))
                 return
+            else:  # for previous game, find the date/time/status
+                gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
+        else:  # for current game, we should find the game "status"
+            gametype = "Current Game"
         # now process html for actual gamestats.
         div = h4.findParent('div').findParent('div')
-        gameTime = False
         # find the playername
         playerName = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'}).find('h1')
         # team, number and position.
@@ -2622,10 +2627,7 @@ class NFL(callbacks.Plugin):
         row = table.findAll('tr')[1].findAll('td')[1:]
         # output.
         output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
-        if gameTime:
-            irc.reply("{0} :: {1} ({2} ({3}))".format(self._red(playerName.getText()), output, gameTime.getText(), gameTimeSpan.getText()))
-        else:  # no gametime.
-            irc.reply("{0} ({1}) :: {2}".format(self._red(playerName.getText()), playerTeam.getText(), output))
+        irc.reply("{0} ({1}) :: {2} :: {3}".format(self._red(playerName.getText()), playerTeam.getText(), gametype, output))
 
     nflgame = wrap(nflgame, [('text')])
 
