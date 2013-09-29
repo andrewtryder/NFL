@@ -2610,7 +2610,7 @@ class NFL(callbacks.Plugin):
             else:  # for previous game, find the date/time/status
                 gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
         else:  # for current game, we should find the game "status"
-            gametype = "Current Game"
+            gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
         # now process html for actual gamestats.
         div = h4.findParent('div').findParent('div')
         # find the playername
