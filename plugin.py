@@ -1225,152 +1225,88 @@ class NFL(callbacks.Plugin):
 
     nflteamrankings = wrap(nflteamrankings, [('somethingWithoutSpaces')])
 
-    def nflweek(self, irc, msg, args, optlist, optweek):
-        """[--pre week #|week #|next]
-
-        Display this week's schedule in the NFL.
-        Issue week # to display that week's games.
-        Ex: 17 OR next
-        """
-
-        # work with getopt.
-        usePre, useNext, outputWeek = False, False, False
-        for (option, arg) in optlist:
-            if option == 'pre':
-                usePre = True
-        # determine our week.
-        if optweek:
-            if optweek == "next":
-                useNext = True
-            elif optweek.isdigit():
-                if usePre:
-                    if 1 <= int(optweek) <= 4:
-                        outputWeek = "Preseason Week {0}".format(optweek)
-                    else:
-                        irc.reply("ERROR: Preseason week number must be between 1 and 4.")
-                        return
-                else:  # not pre.
-                    if 1 <= int(optweek) <= 17:
-                        outputWeek = "Week {0}".format(optweek)
-                    else:
-                        irc.reply("ERROR: Week must be between 1-17")
-                        return
-
-        # now do our http fetch.
-        url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsU2NoZWR1bGUuanM=')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # load the json.
-        jsondata = json.loads(html)
-        week = jsondata.get('week')  # work with the week data so we know where we are.
-        if not week:
-            irc.reply("ERROR: Failed to load schedule.")
-            return
-        # figure out current/next
-        currentWeekName = week.get('current', {'current': None}).get('weekName', None)
-        nextWeekName = week.get('next', {'next': None}).get('weekName', None)
-        if currentWeekName is None:
-            irc.reply("ERROR: Cannot figure out the current week.")
-            return
-        if useNext and not nextWeekName:
-            irc.reply("ERROR: Cannot figure out the next week.")
-            return
-        # now the actual games.
-        games = jsondata.get('content')  # data in games.
-        if not games:
-            irc.reply("ERROR: Failed to load the games data.")
-            return
-
-        if outputWeek:
-            games = [item['games'] for item in games if item['weekName'] == outputWeek]
-            weekOutput = outputWeek
-        elif useNext:
-            games = [item['games'] for item in games if item['weekName'] == nextWeekName]
-            weekOutput = nextWeekName
-        else:
-            games = [item['games'] for item in games if item['weekName'] == currentWeekName]
-            weekOutput = currentWeekName
-        # container for output.
-        gamesweek = {}
-        # iterate over the games.
-        for game in games:
-            for t in game:
-                awayTeam = self._translateTeam('team', 'nid', t['awayTeamId'])
-                homeTeam = self._translateTeam('team', 'nid', t['homeTeamId'])
-                gamesweek.setdefault(t['date']['num'], []).append("{0}@{1} {2}".format(awayTeam, homeTeam, t['date']['time']))
-        # now output.
-        output = "{0} :: {1}".format(self._bu(weekOutput), " || ".join([self._bold("[" + k + "]") + " " + " | ".join([i for i in v]) for (k, v) in gamesweek.items()]))
-        irc.reply(output)
-
-    nflweek = wrap(nflweek, [(getopts({'pre':''})), optional('somethingWithoutSpaces')])
-
     def nflstandings(self, irc, msg, args, optlist, optconf, optdiv):
         """[--detailed] [conf] [division]
         Display NFL standings for a division. Requires a conference and division.
         Use --detailed to display full table. Ex: AFC East
         """
 
+        # handle optlist.
         detailed = False
         for (option, arg) in optlist:
             if option == 'detailed':
                 detailed = True
-
+        # we have to verify the optconf and optdiv.
         optconf = optconf.upper()
-        optdiv = optdiv.title()
+        optdiv = optdiv.upper()
         if optconf != "AFC" and optconf != "NFC":
-            irc.reply("Conference must be AFC or NFC.")
+            irc.reply("ERROR: Conference must be AFC or NFC.")
             return
-        if optdiv != "North" and optdiv != "South" and optdiv != "East" and optdiv != "West":
-            irc.reply("Division must be North, South, East or West.")
+        if optdiv != "NORTH" and optdiv != "SOUTH" and optdiv != "EAST" and optdiv != "WEST":
+            irc.reply("ERROR: Division must be North, South, East or West.")
             return
-
-        if not detailed:
-            url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvZGl2X3N0YW5kaW5nczIuanM=')
-        else:
-            url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvZGl2X3N0YW5kaW5ncy5qcw==')
-
+        # lets fetch our standings.
+        url = self._b64decode('aHR0cDovL3Nwb3J0cy1hay5lc3BuLmdvLmNvbS9uZmwvc3RhbmRpbmdz')
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
             self.log.error("ERROR opening {0}".format(url))
             return
-
-        jsondata = json.loads(html)
-        standings = jsondata.get('content', None)
-        if standings is None:
-            irc.reply("ERROR: Failed to load standings.")
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        table = soup.find('table', attrs={'class':'tablehead', 'cellspacing':'1', 'cellpadding':'3'})
+        # sanity check.
+        if not table:
+            irc.reply("ERROR: I can't find  the NFL standings table. Something broke.")
             return
-
-        # list comp what we need.
-        teams = [item['teams'] for item in standings if item['conference'] == optconf and item['division'] == optdiv]
-
-        # shorter-one liner standings. detailed below.
-        if not detailed:
-            append_list = []
-            for item in teams:  # teams is a list of dicts
-                for team in item:  # so we recurse
-                    append_list.append("{0} {1} ({2})".format(self._translateTeam('team', 'nid', team['teamId']),\
-                                                              team['winLossRecord'], team['percentage']))
-
-            output = "{0} :: {1}".format(self._bu(optconf + " " + optdiv), " | ".join([item for item in append_list]))
-            irc.reply(output)
+        # process the rows (teams) and setup containers.
+        rows = table.findAll('tr', attrs={'class':re.compile('(^oddrow|^evenrow).*')})
+        s = collections.defaultdict(list)  # container to put all the html data into.
+        ll = collections.defaultdict(list)  # sep data structure to determine length.
+        for row in rows:
+            # find the colhead
+            colhead = row.findPrevious('tr', attrs={'class':'colhead'})
+            chcell = [i.getText() for i in colhead.findAll('td')]
+            # NFC EAST, W, L, T, PCT, HOME, ROAD, DIV, CONF, PF, PA, DIFF, STRK
+            div = chcell[0]  # first one is the division.
+            t = {}
+            for i, td in enumerate(row.findAll('td')):
+                # iterate over the "rows" and add into s container.
+                # we also add into lengthlist the lengths for output later.
+                if i == 0:  # first row the colhead is DIV so we replace w/team.
+                    t['TEAM'] = td.getText()
+                    ll['TEAM'].append(len(td.getText()))
+                else:  # anyting else we use the chcell.
+                    t[chcell[i]] = td.getText()
+                    ll[chcell[i]].append(len(td.getText()))
+            # now add the tmp dict into the defaultdict
+            s[div].append(t)
+        # now that we're done, lets prep for output.
+        out = optconf + " " + optdiv  # out = key for s like (AFC EAST)
+        # now we do our actual output.
+        if not detailed:  # short output one-liner.
+            short = [self._bold(z['TEAM']) + " (" + z['W'] + "-" + z['L'] + "-" + z['T'] + ")" for z in s[out]]
+            irc.reply("{0} :: {1}".format(self._red(out), " ".join(short)))
         else:  # detailed.
-            header = "{0:11} {1:>3} {2:>3} {3:>3} {4:<6} {5:<5} {6:<5} {7:<5} {8:<5} {9:<4} {10:<4} {11:<6} {12:<6}"\
-            .format(self._ul(optconf + " " + optdiv),'W','L','T','PCT','HOME','ROAD','DIV','CONF','PF','PA','STRK','PDIFF')
-
-            irc.reply(header)
-
-            for item in teams:  # teams is a list of dicts
-                for t in item:  # so we recurse
-                    output = "{0:9} {1:3} {2:3} {3:3} {4:6} {5:5} {6:5} {7:5} {8:5} {9:4} {10:4} {11:6} {12:6}".format(t['team']['abbreviation'],\
-                        t['wins'], t['losses'], t['ties'], t['percentage'], t['extra']['home_record'], t['extra']['road_record'],\
-                        t['extra']['division_record'], t['extra']['conference_record'], t['extra']['points_for'], t['extra']['points_against'],\
-                        t['extra']['home_record'], t['extra']['net_points'], t['extra']['last_5_record'])
-
-                    irc.reply(output)
+            # we have to do a static order. it can break but makes the code simpler.
+            outorder = ['TEAM', 'W', 'L', 'T', 'PCT', 'HOME', 'ROAD', 'DIV', 'CONF', 'PF', 'PA', 'DIFF', 'STRK']
+            # first, lets print the header row. easier on the code below.
+            hrs = []
+            # iterate over the header row list. we use the list entries as keys for lengthlist.
+            for hr in outorder:
+                if hr == "TEAM":  # first entry is normally TEAM. we replace this with the conf but maintain spacing.
+                    hrs.append("{0:{1}}".format(out, max(ll[hr])+4, key=int))
+                else:  # regular append with hr = key matching up in ll + 2 for spacing.
+                    hrs.append("{0:{1}}".format(hr, max(ll[hr])+4, key=int))
+            # output the header row. we join all entries in the list.
+            irc.reply(" ".join(hrs))
+            # now lets iterate over the keys of out, which are rows of each team.
+            for o in s[out]:  # out = values in s that match our key (conf + div) and is verified above.
+                l = []  # list container we populate with each line to display.
+                for y in outorder:  # we iterate over the outorder list to populate l. the spacing is done via ll+2.
+                    l.append("{0:<{1}}".format(o[y],  max(ll[y])+4, key=int))
+                # now output one line at a time.  we join all entries in the list.
+                irc.reply(" ".join(l))
 
     nflstandings = wrap(nflstandings, [getopts({'detailed':''}), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
 
