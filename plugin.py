@@ -1826,8 +1826,9 @@ class NFL(callbacks.Plugin):
     nflpowerrankings = wrap(nflpowerrankings, [optional('somethingWithoutSpaces')])
 
     def nflschedule(self, irc, msg, args, optlist, optteam):
-        """<team>
+        """[--full] <team>
         Display the last and next five upcoming games for team.
+        Use --full to display the entire 16 game schedule.
         Ex: NE
         """
 
@@ -1842,10 +1843,11 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
             return
 
-        lookupteam = self._translateTeam('yahoo', 'team', optteam) # don't need a check for 0 here because we validate prior.
+        lookupteam = self._translateTeam('eid', 'team', optteam) # don't need a check for 0 here because we validate prior.
 
         if fullSchedule: # diff url/method.
-            url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/schedule' % lookupteam
+            lookupteam = self._translateTeam('eid', 'team', optteam) # don't need a check for 0 here because we validate prior.
+            url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsLw==') + 'teamschedule?teamId=%s&wjb=' % str(lookupteam)
             html = self._httpget(url)
             if not html:
                 irc.reply("ERROR: Failed to fetch {0}.".format(url))
@@ -1853,47 +1855,25 @@ class NFL(callbacks.Plugin):
                 return
 
             soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-            table = soup.find('table', attrs={'summary':'Regular Season Games'})
-
-            if not table:
-                irc.reply("ERROR: Failed to find schedule for: %s") % optteam
-                return
-
-            tbody = table.find('tbody')
-            rows = tbody.findAll('tr')
-
-            append_list = []
-
-            for row in rows:
+            table = soup.find('table', attrs={'class':'table'})
+            # make sure we have table
+            rows = table.findAll('tr')
+            # container for output
+            schedule = []
+            # process these rows.
+            for row in rows[1:]:
                 tds = row.findAll('td')
-                week = tds[0]
-
-                if row.find('td', attrs={'class':'title bye'}):
-                    date = "BYE"
-                    opp = ""
-                    score = ""
-                    appendString = "W{0}-{1}".format(ircutils.bold(week.getText()), ircutils.underline("BYE"))
-                else:
-                    date = tds[1].getText()
-                    dateSplit = date.split(',', 1) # take the date, dump the rest.
-                    date = dateSplit[1]
-                    opp = tds[2] # with how the Tag/string comes in, we need to extract one part and format the other.
-                    oppName = opp.find('span')
-                    if oppName:
-                        oppName.extract()
-                    oppTeam = opp.find('a').getText()
-                    #opp = tds[2].find('span').getText()
-                    #opp = self._translateTeam('team','full', opp) # use the db to make a full team small.
-                    score = tds[3].getText().replace('EDT','').replace('EST','').replace('pm','').replace('am','') # strip the garbage
-                    #score = score.replace('W', ircutils.mircColor('W', 'green')).replace('L', ircutils.mircColor('L', 'red'))
-                    appendString = "W{0}-{1} {2} {3}".format(ircutils.bold(week.getText()), date.strip(), oppTeam.strip(), score.strip())
-
-                append_list.append(appendString)
-
-            descstring = " | ".join([item for item in append_list])
+                if tds[0]['class'].startswith('ind') and len(tds) == 3:
+                    gamedate = tds[0].getText()
+                    opp = tds[1].getText()
+                    result = tds[2].getText()
+                    schedule.append("{0} - {1} - {2}".format(gamedate, opp, result))
+            # prep for output.
+            descstring = " | ".join([item for item in schedule])
             output = "{0} SCHED :: {1}".format(ircutils.mircColor(optteam, 'red'), descstring)
             irc.reply(output)
-        else:
+        else:  # short schedule.
+            lookupteam = self._translateTeam('yahoo', 'team', optteam) # don't need a check for 0 here because we validate prior.
             url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/calendar/rss.xml' % lookupteam
             html = self._httpget(url)
             if not html:
