@@ -2030,7 +2030,7 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         lastDate = soup.findAll('span', attrs={'class': 'time'})[0]
         divs = soup.findAll('div', attrs={'class': 'entry'})
         # list container for output.
@@ -2053,7 +2053,7 @@ class NFL(callbacks.Plugin):
             if charge:  # if we found strong, regex to parse it out.
                 charges = re.search(r'<strong>Charge.*?</strong>(.*?)<br />', charge.findParent('p').renderContents(), re.I| re.S| re.M)
                 if charges:  # we found what we needed.
-                    charge = charges.group(1).encode('utf-8').strip()
+                    charge = charges.group(1) # .encode('utf-8').strip()
                 else:  # something went wrong so don't add.
                     charge = None
             else:  # didn't find so something probably broke.
