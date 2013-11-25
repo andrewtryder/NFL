@@ -358,10 +358,17 @@ def _rehashdm(eid):
         print "I did not find any player in the db with EID '{0}'".format(eid)
         return None
     else:
-        firstname = doublemetaphone(row[0])
-        lastname = doublemetaphone(row[1])
-        print "DM :: FIRSTNAME {0} LASTNAME {1}".format(firstname, lastname)
-        return dm
+        fndm = doublemetaphone(row[0])
+        lndm = doublemetaphone(row[1])
+        # firstname and lastname are tuples.
+        with sqlite3.connect(DB) as db:
+            cursor = db.cursor()
+            try:
+                cursor.execute("UPDATE players SET fndm1=?, fndm2=?, lndm1=?, lndm2=? WHERE eid=?", (fndm[0], fndm[1], lndm[0], lndm[1], eid,))
+                db.commit()
+                return("I have successfully updated EID {0}'s doublemetaphone ({1}, {2})".format(eid, fndm, lndm))
+            except sqlite3.Error, e:
+                return("ERROR: I cannot update EID {0}'s doublemetaphone: '{1}'".format(eid, e))
 
 parser = argparse.ArgumentParser(description='playerdb management script')
 parser.add_argument("--finddupes", action='store_true', help="find duplicate player names in the database.")
