@@ -2373,6 +2373,11 @@ class NFL(callbacks.Plugin):
                     related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
                     irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                     return
+                # make sure it's valid.
+                if lookupid == '':
+                    irc.reply("ERROR: I do not have a valid RID for {0}. My apologies.".format(optplayer))
+                    return
+            # all is good. lets go.
             # build and fetch url.
             url = self._b64decode('aHR0cDovL2Rldi5yb3Rvd29ybGQuY29tL3NlcnZpY2VzL21vYmlsZS5hc214L0dldEpTT05TaW5nbGVQbGF5ZXJOZXdzP3Nwb3J0PU5GTA==') + '&playerid=%s' % lookupid
             html = self._httpget(url)
@@ -2466,6 +2471,10 @@ class NFL(callbacks.Plugin):
                 related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
                 irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
                 return
+        # sanity check for rid because I sometimes lack them.
+        if lookupid == '':
+            irc.reply("ERROR: I have {0} in the DB but no RID for them. Please visit roto for the player's contract.".format(optplayer))
+            return
         # build and fetch url.
         url = self._b64decode('aHR0cDovL3d3dy5yb3Rvd29ybGQuY29tL3BsYXllci9uZmwv') + '%s/' % lookupid
         html = self._httpget(url)
