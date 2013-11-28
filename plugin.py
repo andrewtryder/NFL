@@ -2547,7 +2547,12 @@ class NFL(callbacks.Plugin):
         if not table:
             irc.reply("ERROR: I could not find any statistics for: {0}. Sure you typed in the right player?".format(playerName.getText()))
             return
-        # we did find. Continue.
+        # this is an odd "bug" where a player is active but no stats are displayed.
+        thisgame = table.findAll('tr')[1].find('td')  # 2nd row (first non header) and first cell.
+        if thisgame.getText() != "This Game":
+            irc.reply("ERROR: I could not find any active statistics for: {0} in active game. This happens when player is active for the game but has not played a down.".format(playerName.getText()))
+            return
+        # we did find... continue.
         header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
         row = table.findAll('tr')[1].findAll('td')[1:]
         # output.
