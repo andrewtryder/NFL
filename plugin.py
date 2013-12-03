@@ -2436,6 +2436,9 @@ class NFL(callbacks.Plugin):
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         # find the main div
         div = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'})
+        if not div:
+            irc.reply("ERROR: I could not find active information for player.")
+            return
         playerName = div.find('h1')
         # setup our output container with the name.
         out = []
