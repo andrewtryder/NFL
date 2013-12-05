@@ -199,7 +199,7 @@ class NFL(callbacks.Plugin):
     def _validteams(self, optteam):
         """Takes optteam as input function and sees if it is a valid team.
         Aliases are supported via nflteamaliases table.
-        Returns a 1 upon error (no team name nor alias found.)
+        Returns None upon error (no team name nor alias found.)
         Returns the team's 3-letter (ex: NE or ARI) if successful."""
 
         # first, set default value.
@@ -207,16 +207,16 @@ class NFL(callbacks.Plugin):
         # now, do our sql.
         with sqlite3.connect(self._nfldb) as conn:
             cursor = conn.cursor()  # we only do exact matching here. no fuzzy.
-            query = "SELECT team FROM nflteamaliases WHERE teamalias LIKE ?"  # check aliases first.
-            cursor.execute(query, ('%'+self._sanitizeName(optteam)+'%',))
-            aliasrow = cursor.fetchone()
-            if aliasrow:  # we found a team alias.
-                returnval = str(aliasrow[0])
+            cursor.execute("SELECT team FROM nfl WHERE team=?", (optteam.upper(),))
+            teamrow = cursor.fetchone()
+            if teamrow:  # we found a team.
+                returnval = str(teamrow[0])
             else:  # no team alias so we go back to normal team matching.
-                cursor.execute("SELECT team FROM nfl WHERE team=?", (optteam.upper(),))
-                teamrow = cursor.fetchone()
-                if teamrow:  # found team in regular nfl teams. no match? None.
-                    returnval = str(teamrow[0])
+                query = "SELECT team FROM nflteamaliases WHERE teamalias LIKE ?"  # check aliases second.
+                cursor.execute(query, ('%'+self._sanitizeName(optteam)+'%',))
+                aliasrow = cursor.fetchone()
+                if aliasrow:  # found team in regular nfl teams. no match? None.
+                    returnval = str(aliasrow[0])
         # return time.
         return returnval
 
