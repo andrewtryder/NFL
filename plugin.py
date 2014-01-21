@@ -1353,27 +1353,21 @@ class NFL(callbacks.Plugin):
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         teamtitle = soup.find('title')
-        tbody = soup.find('tbody')
-        # list for output.
-        capfigures = []
-        # process through what we find in the table.
-        captds = tbody.findAll('td', attrs={'class':'total team total-title'})
-        for captd in captds:
-            row = captd.findPrevious('tr')
-            captitle = row.find('td', attrs={'class': 'total team total-title'})
-            capfigure = row.find('td', attrs={'class': 'total figure'})
-            capfigure = self._format_cap(capfigure.getText())
-            capfigures.append("{0}: {1}".format(self._ul(captitle.getText()), capfigure))
-        # this is for the bottom row.
-        bottomrow = tbody.findAll('tr')
-        bottomtds = bottomrow[-2].findAll('td')
-        basesalary, signingbonus, otherbonus, totalcap = bottomtds[1].getText(), bottomtds[2].getText(), bottomtds[3].getText(), bottomtds[5].getText()
-        capspace = bottomrow[-1].findAll('td')[-1].getText()  # last row, last td.
-        # now output.
-        descstring = " | ".join([item for item in capfigures])
-        output = "{0} :: Base Salaries {1}  Signing Bonuses {2}  Other Bonus {3} :: {4} :: TOTAL CAP {5} :: SPACE {6}".format(\
-            self._red(teamtitle.getText()), self._format_cap(basesalary), self._format_cap(signingbonus),\
-            self._format_cap(otherbonus), descstring, self._format_cap(totalcap), self._bold(self._format_cap(capspace)))
+        basespan = soup.find('span', text="Cap Space")
+        tbody = basespan.findParent('tbody')
+        #tbodys = soup.findAll('tbody')  # find all tbody
+        #tbody = tbodys[-1]  # last tbody.
+        trs = tbody.findAll('tr')[2:]  # findAll tr, skip the first two.
+        # container for output.
+        capfigs = []
+        # now iterate over these.
+        for tr in trs:
+            tds = tr.findAll('td')  # find all td in tr.
+            n = self._bold(tds[0].getText().encode('utf-8'))  # bold title.
+            f = self._format_cap(tds[-1].getText().encode('utf-8'))  # format cap figure.
+            capfigs.append("{0}: {1}".format(n, f))  # append to list.
+        # now format output.
+        output = "{0} :: {1}".format(self._red(teamtitle.getText()), " | ".join([i for i in capfigs]))
         irc.reply(output)
 
     nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
