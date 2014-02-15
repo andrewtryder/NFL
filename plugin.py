@@ -1353,11 +1353,20 @@ class NFL(callbacks.Plugin):
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         teamtitle = soup.find('title')
-        basespan = soup.find('span', text="Cap Space")
-        tbody = basespan.findParent('tbody')
-        #tbodys = soup.findAll('tbody')  # find all tbody
-        #tbody = tbodys[-1]  # last tbody.
-        trs = tbody.findAll('tr')[2:]  # findAll tr, skip the first two.
+        basespan = soup.find('span', text="Cap Space")  # we derive the tbody via a specific span.
+        tbody = basespan.findParent('tbody')  # find the proper tbody.
+        ztrs = tbody.findAll('tr') # inside that tbody, we have to do some disgusting regex.
+        # create the container to dump the shit we want in it.
+        trs = []
+        # have to change this -- again. disgusting but stops all the changing on the site.
+        for ztr in ztrs:  # go over our row.
+            ztds = ztr.findAll('td')  # in each row, look at the tds class.
+            if ztds:  # make sure there are tds in the tr.
+                for f in ztds:  # iterate over those tds now.
+                    if f['class'].startswith('total'):  # if the td's class starts with 'total'
+                        parent = f.findParent('tr')  # find the td's parent.
+                        trs.append(parent)  # append the parent into our trs list container.
+                        break  # break out of the tds so we don't inject multiple trs.
         # container for output.
         capfigs = []
         # now iterate over these.
@@ -1905,7 +1914,7 @@ class NFL(callbacks.Plugin):
         Display the time until the next NFL season starts.
         """
 
-        dDelta = datetime.datetime(2013, 9, 05, 21, 30) - datetime.datetime.now()
+        dDelta = datetime.datetime(2014, 9, 05, 21, 30) - datetime.datetime.now()
         irc.reply("There are {0} days {1} hours {2} minutes {3} seconds until the start of the 2013 NFL Season.".format(\
                                             dDelta.days, dDelta.seconds/60/60, dDelta.seconds/60%60, dDelta.seconds%60))
 
