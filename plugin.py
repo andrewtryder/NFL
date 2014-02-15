@@ -1363,7 +1363,7 @@ class NFL(callbacks.Plugin):
             ztds = ztr.findAll('td')  # in each row, look at the tds class.
             if ztds:  # make sure there are tds in the tr.
                 for f in ztds:  # iterate over those tds now.
-                    if f['class'].startswith('total'):  # if the td's class starts with 'total'
+                    if f['class'] == "total team total-title":  # very specific td class we're looking for.
                         parent = f.findParent('tr')  # find the td's parent.
                         trs.append(parent)  # append the parent into our trs list container.
                         break  # break out of the tds so we don't inject multiple trs.
