@@ -1915,7 +1915,7 @@ class NFL(callbacks.Plugin):
         """
 
         dDelta = datetime.datetime(2014, 9, 05, 21, 30) - datetime.datetime.now()
-        irc.reply("There are {0} days {1} hours {2} minutes {3} seconds until the start of the 2013 NFL Season.".format(\
+        irc.reply("There are {0} days {1} hours {2} minutes {3} seconds until the start of the 2014 NFL Season.".format(\
                                             dDelta.days, dDelta.seconds/60/60, dDelta.seconds/60%60, dDelta.seconds%60))
 
     nflcountdown = wrap(nflcountdown)
