@@ -529,7 +529,7 @@ class NFL(callbacks.Plugin):
             return
         # sanity check.
         if "Current Salary Information " not in html:
-            irc.reply("ERROR: I could not find current salary information. Player retired or no active contract?")
+            irc.reply("ERROR: I could not find current salary information for '{0}'. Player retired or no active contract?".format(optplayer))
             return
         # parse html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
