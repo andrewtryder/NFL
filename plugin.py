@@ -176,6 +176,26 @@ class NFL(callbacks.Plugin):
         except:
             return url
 
+    def _format_cap(self, figure):
+        """Format cap numbers for nflcap command."""
+
+        figure = figure.replace(',', '').strip()  # remove commas.
+        if figure.startswith('-'):  # figure out if we're a negative number.
+            negative = True
+            figure = figure.replace('-','')
+        else:
+            negative = False
+
+        try:  # try and millify.
+            figure = self._millify(float(figure))
+        except:  # return what we have if it breaks
+            figure = figure
+
+        if negative:
+            figure = "-" + figure
+        # now return
+        return figure
+
     ####################################
     # INTERNAL TEAM DATABASE FUNCTIONS #
     ####################################
@@ -359,6 +379,203 @@ class NFL(callbacks.Plugin):
             numofplayers, numofaliases, numofteams, numofteamaliases))
 
     nfldb = wrap(nfldb)
+    
+    ################################
+    # INTERNET PLAYER DB FUNCTIONS #
+    ################################
+
+    def _pf(self, db, pname):
+        """<e|r|s> <player>
+        
+        Find a player's page via google ajax. Specify DB based on site.
+        """
+
+        # first, figure out the site based on db string.
+        if db == "e":  # espn.
+            burl = "%s site:espn.go.com/nfl/player/" % pname
+        elif db == "r":  # rworld.
+            burl = "%s site:www.rotoworld.com/player/nfl/" % pname
+        elif db == "s":  # st.
+            burl = "%s site:www.spotrac.com/nfl/" % pname
+        # construct url (properly escaped)
+        url = "http://ajax.googleapis.com/ajax/services/search/web?v=1.0&rsz=8&q=%s" % burl.replace(' ', '%20')
+        # now fetch url.
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return None
+        # load the json.
+        jsonf = json.loads(html)
+        # make sure status is 200.
+        if jsonf['responseStatus'] != 200:
+            return None
+        # make sure we have results.
+        results = jsonf['responseData']['results']
+        if len(results) == 0:
+            return None
+        # finally, return the first url.
+        url = results[0]['url']
+        return url
+
+    ################################################
+    # NEW PLAYER DB FUNCTIONS WITH INTERNET SEARCH #
+    ################################################
+    
+    def nflplayertransactions(self, irc, msg, args, optplayer):
+        """<player name>
+        
+        Display any known transactions for player.
+        Ex: Tom Brady.
+        """
+
+        pf = self._pf("s", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # html time
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        pname = soup.find('div', attrs={'class':'playerHeaderInfo'})
+        # lets figure out pname first.
+        if pname:
+            pname = pname.find('h2').getText().encode('utf-8')  # playername.
+        else:  # did not find. go back to what the user entered.
+            pname = optplayer
+        # now try and find transactions
+        div = soup.find('div', attrs={'id':'teamTrans'})
+        if not div:
+            irc.reply("ERROR: I could not find any transactions for: {0}".format(pname))
+            return
+        # next.
+        trans = div.findAll('td', attrs={'class':'transdata'})
+        if len(trans) == 0:
+            irc.reply("ERROR: I could not find any transactions for: {0}".format(pname))
+            return
+        # ok we did find some so lets output. normalizeWhitespace
+        irc.reply("{0}({1}) :: {2}".format(self._bold(pname), len(trans), " | ".join([utils.str.normalizeWhitespace(i.getText(separator=' ').encode('utf-8')) for i in trans])))
+
+    nflplayertransactions = wrap(nflplayertransactions, [('text')])
+    
+    def nflplayerfines(self, irc, msg, args, optplayer):
+        """<player name>
+        
+        Display any known fines for player, if found.
+        Ex: Tom Brady
+        """
+
+        pf = self._pf("s", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # html time
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        pname = soup.find('div', attrs={'class':'playerHeaderInfo'})
+        # lets figure out pname first.
+        if pname:
+            pname = pname.find('h2').getText().encode('utf-8')  # playername.
+        else:  # did not find. go back to what the user entered.
+            pname = optplayer
+        # find finerows.
+        finerows = soup.findAll('tr', attrs={'class':'fineRow'})
+        # check if we found any.
+        if len(finerows) == 0:
+            irc.reply("ERROR: I did not find any known fines for: {0}".format(pname))
+            return
+        else:
+            fines = []  # empty container.
+            for finerow in finerows:
+                tds = [i.getText().encode('utf-8') for i in finerow.findAll('td')]  # find all tds.
+                details = finerow.find('a', attrs={'class':'details'})  # try to find details.
+                if details:
+                    fines.append("DATE: {0} REASON: {1} SUSP: {2} AMT: {3} NOTES: {4}".format(tds[4], tds[1], tds[2], tds[3], details['rel'].encode('utf-8')))
+                else:
+                    fines.append("DATE: {0} REASON: {1} SUSP: {2} AMT: {3}".format(tds[4], tds[1], tds[2]))
+            # now output.
+            irc.reply("{0}({1}) :: {2}".format(pname, len(fines), " | ".join(fines)))
+    
+    nflplayerfines = wrap(nflplayerfines, [('text')])
+    
+    def nflspotcontract(self, irc, msg, args, optplayer):
+        """<player name>
+        
+        Display contract information for player, if found, via SpotTrac.
+        Ex: Tom Brady
+        """
+        
+        pf = self._pf("s", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # sanity check.
+        if "Current Salary Information " not in html:
+            irc.reply("ERROR: I could not find current salary information. Player retired or no active contract?")
+            return
+        # parse html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        pname = soup.find('div', attrs={'class':'playerHeaderInfo'}).find('h2').getText().encode('utf-8')  # playername.
+        table = soup.find('table', attrs={'class':'playerTable'})
+        # overview salary info.
+        salinfo = table.find('table', attrs={'class':'salaryTable salaryInfo'})
+        if not salinfo:
+            irc.reply("ERROR: I could not find a salary table at: {0}".format(pf))
+            return
+        si = []
+        salinfotds = salinfo.findAll('td', attrs={'class':'contract-item'})
+        for (i, salinfotd) in enumerate(salinfotds):  # enum so we skip header row.
+            # two tds in each thing here.
+            l = salinfotd.find('span', attrs={'class':'playerLabel'})
+            e = salinfotd.find('span', attrs={'class':'playerValue'})
+            if i == 0:  # first one only.
+                si.append("{0}".format(e.getText()))
+            else:  # rest of them.
+                si.append("{0}: {1}".format(l.getText(), e.getText()))
+        # now lets find the 'current salary' years
+        cursal = table.find('table', attrs={'class':'salaryTable current'})
+        cursalhead = cursal.find('thead').findAll('th')  # list of th names.
+        cursalrows = cursal.find('tbody').findAll('tr', attrs={'class':'salaryRow'})
+        cursalout = []  # list for output.
+        # now iterate over these rows.
+        for cursalrow in cursalrows:
+            tds = cursalrow.findAll('td')
+            for (i, td) in enumerate(tds):
+                if i == 0:  # append :: before to make it look nicer.
+                    cursalout.append(" :: {0}".format(td.getText()))
+                else:
+                    # now add it in with mated colheader. td needs to get formatted.
+                    tdtxt = td.getText()  #  grab td text.
+                    if tdtxt != "-":
+                        tdtxt = self._format_cap(tdtxt)  # try and format..
+                        cursalout.append("{0}: {1}".format(cursalhead[i].getText(), tdtxt))
+        # lets output what we have so far.
+        irc.reply("{0} :: {1} :: {2}".format(self._bold(pname), " | ".join(si), " | ".join(cursalout)))
+        # next, the details on contracts, if present.
+        condetails = table.find('div', attrs={'class':'player-details'})
+        if condetails:
+            condetails = condetails.getText(separator=' ')
+            irc.reply("{0} :: {1}".format(self._bold(pname), condetails))
+
+    nflspotcontract = wrap(nflspotcontract, [('text')])
 
     ####################
     # PUBLIC FUNCTIONS #
@@ -366,6 +583,7 @@ class NFL(callbacks.Plugin):
 
     def nflteams(self, irc, msg, args, optconf, optdiv):
         """[conference] [division]
+        
         Display a list of NFL teams for input.
         Optional: use AFC or NFC for conference.
         It can also display specific divisions with North, South, East or West.
@@ -410,6 +628,7 @@ class NFL(callbacks.Plugin):
 
     def nflhof(self, irc, msg, args, optyear):
         """[year]
+        
         Display NFL Hall Of Fame inductees for year 1963 and on. Defaults to the latest year.
         Ex: 2010
         """
@@ -453,6 +672,7 @@ class NFL(callbacks.Plugin):
 
     def nflseasonsummary(self, irc, msg, args, optteam, optyear):
         """<TEAM> <YEAR>
+        
         Display a team's schedule with win/loss from season.
         Ex: NE 2005 or GB 2010
         """
@@ -521,6 +741,7 @@ class NFL(callbacks.Plugin):
 
     def nflawards(self, irc, msg, args, optyear):
         """<year>
+        
         Display NFL Awards for a specific year. Use a year from 1966 on to the current year.
         Ex: 2003
         """
@@ -1309,26 +1530,6 @@ class NFL(callbacks.Plugin):
                 irc.reply(" ".join(l))
 
     nflstandings = wrap(nflstandings, [getopts({'detailed':''}), ('somethingWithoutSpaces'), ('somethingWithoutSpaces')])
-
-    def _format_cap(self, figure):
-        """Format cap numbers for nflcap command."""
-
-        figure = figure.replace(',', '').strip()  # remove commas.
-        if figure.startswith('-'):  # figure out if we're a negative number.
-            negative = True
-            figure = figure.replace('-','')
-        else:
-            negative = False
-
-        try:  # try and millify.
-            figure = self._millify(float(figure))
-        except:
-            figure = figure
-
-        if negative:
-            figure = "-" + figure
-        # now return
-        return figure
 
     def nflcap(self, irc, msg, args, optteam):
         """<team>
