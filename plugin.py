@@ -176,8 +176,33 @@ class NFL(callbacks.Plugin):
         except:
             return url
 
+    def _hs(self, s):
+        """
+        format a size in bytes into a 'human' size.
+        """
+
+        try:  # to be safe, wrap in a giant try/except block.    
+            
+            s = s.replace(',', '').replace('$', '')  # remove $ and ,
+            suffixes_table = [('',0),('k',0),('M',1),('B',2),('T',2), ('Z',2)]
+            num = float(s)
+            for suffix, precision in suffixes_table:
+                if num < 1000.0:
+                    break
+                num /= 1000.0
+        
+            if precision == 0:
+                formatted_size = "%d" % num
+            else:
+                formatted_size = str(round(num, ndigits=precision))
+        
+            return "%s%s" % (formatted_size, suffix)
+        except Exception, e:
+            self.log.info("_hs: ERROR trying to format: {0} :: {1}".format(s, e))
+            return s
+    
     def _format_cap(self, figure):
-        """Format cap numbers for nflcap command."""
+        """Format cap numbers for dealing with numbers command."""
 
         figure = figure.replace(',', '').strip()  # remove commas.
         if figure.startswith('-'):  # figure out if we're a negative number.
@@ -391,6 +416,11 @@ class NFL(callbacks.Plugin):
         """
 
         # first, figure out the site based on db string.
+        # quote_plus(search_term)
+        # urllib.urlencode({'q':searchfor})
+        # try urlencode pname.
+        #pname = utils.web.urlencode(pname)
+        # db.
         if db == "e":  # espn.
             burl = "%s site:espn.go.com/nfl/player/" % pname
         elif db == "r":  # rworld.
@@ -459,7 +489,7 @@ class NFL(callbacks.Plugin):
             irc.reply("ERROR: I could not find any transactions for: {0}".format(pname))
             return
         # ok we did find some so lets output. normalizeWhitespace
-        irc.reply("{0}({1}) :: {2}".format(self._bold(pname), len(trans), " | ".join([utils.str.normalizeWhitespace(i.getText(separator=' ').encode('utf-8')) for i in trans])))
+        irc.reply("{0}({1}) :: {2}".format(self._bu(pname), len(trans), " | ".join([utils.str.normalizeWhitespace(i.getText(separator=' ').encode('utf-8')) for i in trans])))
 
     nflplayertransactions = wrap(nflplayertransactions, [('text')])
     
@@ -501,11 +531,11 @@ class NFL(callbacks.Plugin):
                 tds = [i.getText().encode('utf-8') for i in finerow.findAll('td')]  # find all tds.
                 details = finerow.find('a', attrs={'class':'details'})  # try to find details.
                 if details:
-                    fines.append("DATE: {0} REASON: {1} SUSP: {2} AMT: {3} NOTES: {4}".format(tds[4], tds[1], tds[2], tds[3], details['rel'].encode('utf-8')))
+                    fines.append("DATE: {0} REASON: {1} SUSP: {2} AMT: {3} NOTES: {4}".format(tds[4], tds[1], tds[2], self._hs(tds[3]), details['rel'].encode('utf-8')))
                 else:
                     fines.append("DATE: {0} REASON: {1} SUSP: {2} AMT: {3}".format(tds[4], tds[1], tds[2]))
             # now output.
-            irc.reply("{0}({1}) :: {2}".format(pname, len(fines), " | ".join(fines)))
+            irc.reply("{0}({1}) :: {2}".format(self._bu(pname), len(fines), " | ".join(fines)))
     
     nflplayerfines = wrap(nflplayerfines, [('text')])
     
@@ -549,7 +579,17 @@ class NFL(callbacks.Plugin):
             if i == 0:  # first one only.
                 si.append("{0}".format(e.getText()))
             else:  # rest of them.
-                si.append("{0}: {1}".format(l.getText(), e.getText()))
+                saltit = self._bold(l.getText().replace(':', ''))
+                salfig = self._hs(e.getText())
+                si.append("{0}: {1}".format(saltit, salfig))
+        # next, the details on contracts, if present.
+        condetails = table.find('div', attrs={'class':'player-details'})
+        if condetails:  # clean this up a bit because there are too many spaces.
+            condetails = utils.str.normalizeWhitespace(condetails.getText(separator=' ').strip())
+            irc.reply("{0} :: {1} :: {2}".format(self._bu(pname), " | ".join(si), condetails))
+        else:  # just the basics on the contract details from above. something went wrong with condetails.
+            irc.reply("{0} :: {1}".format(self._bu(pname), " | ".join(si)))
+        # last entry now.
         # now lets find the 'current salary' years
         cursal = table.find('table', attrs={'class':'salaryTable current'})
         cursalhead = cursal.find('thead').findAll('th')  # list of th names.
@@ -559,21 +599,16 @@ class NFL(callbacks.Plugin):
         for cursalrow in cursalrows:
             tds = cursalrow.findAll('td')
             for (i, td) in enumerate(tds):
-                if i == 0:  # append :: before to make it look nicer.
-                    cursalout.append(" :: {0}".format(td.getText()))
+                if i == 0:  # this is ONLY the year.
+                    cursalout.append("{0}".format(self._bold(td.getText())))
                 else:
                     # now add it in with mated colheader. td needs to get formatted.
                     tdtxt = td.getText()  #  grab td text.
                     if tdtxt != "-":
-                        tdtxt = self._format_cap(tdtxt)  # try and format..
+                        tdtxt = self._hs(tdtxt)  # try and format..
                         cursalout.append("{0}: {1}".format(cursalhead[i].getText(), tdtxt))
         # lets output what we have so far.
-        irc.reply("{0} :: {1} :: {2}".format(self._bold(pname), " | ".join(si), " | ".join(cursalout)))
-        # next, the details on contracts, if present.
-        condetails = table.find('div', attrs={'class':'player-details'})
-        if condetails:
-            condetails = condetails.getText(separator=' ')
-            irc.reply("{0} :: {1}".format(self._bold(pname), condetails))
+        irc.reply("{0} :: {1}".format(self._bu(pname), " | ".join(cursalout)))
 
     nflspotcontract = wrap(nflspotcontract, [('text')])
 
