@@ -612,6 +612,597 @@ class NFL(callbacks.Plugin):
 
     nflspotcontract = wrap(nflspotcontract, [('text')])
 
+    def nflrotocontract(self, irc, msg, args, optplayer):
+        """<player>
+
+        Display NFL contract for player.
+        Ex: Tom Brady
+        """
+
+        pf = self._pf("r", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # process HTML.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        pn = soup.find('div', attrs={'class':'playercard', 'style':'display:none;', 'id': re.compile('^cont_.*')})
+        if not pn:  # check and make sure we have a contract.
+            irc.reply("ERROR: No contract found for: {0} :: {1}".format(optplayer, pf))
+            return
+        # format/parse html.
+        h1 = soup.find('h1').getText().split('|',1)[0].strip()
+        p1 = pn.find('div', attrs={'class': 'report'}).getText()
+        contract = re.sub('<[^<]+?>', '', p1).strip()
+        contract = utils.str.normalizeWhitespace(contract)  # kill double spacing.
+        # output
+        irc.reply("{0} :: {1}".format(self._red(h1), contract))
+
+    nflrotocontract = wrap(nflrotocontract, [('text')])
+
+    def nflinfo(self, irc, msg, args, optplayer):
+        """<player>
+
+        Display basic information on NFL player.
+        Ex: Tom Brady
+        """
+
+        pf = self._pf("e", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        # find the main div
+        div = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'})
+        if not div:
+            irc.reply("ERROR: I could not find active information for player.")
+            return
+        playerName = div.find('h1')
+        # setup our output container with the name.
+        out = []
+        # basic stats.
+        stats = div.find('ul', attrs={'class':'general-info'})
+        for stat in stats:  # iterate over and add the text.
+            out.append(stat.getText())
+        # find the rest of the bio
+        bios = div.find('ul', attrs={'class':'player-metadata floatleft'}).findAll('li')
+        for bios in bios:
+            cat = bios.find('span')  # span is the category.
+            cat.extract()  # now extract the span because bios = rest of text we want.
+            out.append("{0}: {1}".format(cat.getText(), bios.getText()))
+        # prepare output.
+        descstring = " | ".join([item for item in out])
+        output = "{0} :: {1}".format(self._red(playerName.getText()), descstring)
+        irc.reply(output)
+
+    nflinfo = wrap(nflinfo, [('text')])
+
+    def nflplayernews(self, irc, msg, args, optplayer):
+        """<player>
+
+        Display latest news for NFL player.
+        Ex: Tom Brady
+        """
+
+        pf = self._pf("r", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # now we have to find the userid in the url.
+        pidnum = re.findall('\d+', pf)  # extract the digits from the string.
+        # sanity check.
+        if len(pidnum) == 0:
+            irc.reply("ERROR: I could not find a player id in the url: {0}".format(pf))
+            return
+        else:
+            lookupid = pidnum[0]
+        # process html.
+        url = self._b64decode('aHR0cDovL2Rldi5yb3Rvd29ybGQuY29tL3NlcnZpY2VzL21vYmlsZS5hc214L0dldEpTT05TaW5nbGVQbGF5ZXJOZXdzP3Nwb3J0PU5GTA==') + '&playerid=%s' % lookupid
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+            return
+        # parse json
+        jsondata = json.loads(html)
+        # check to make sure we have news and build output string.
+        if len(jsondata) < 1:  # generic error here.
+            playerNews = "I did not find any news for player."
+        else:  # we did find some playernews.
+            jsondata = jsondata[0]
+            playerName = jsondata['FirstName'] + " " + jsondata['LastName']
+            timestamp = jsondata.get('TimeStamp')  # RawTimeStamp
+            headline = jsondata.get('Headline')
+            impact = jsondata.get('Impact')
+            news = jsondata.get('News')
+            # now construct playernews string for output.
+            playerNews = ""
+            if timestamp: playerNews += "{0}".format(timestamp)
+            if headline: playerNews += " {0}".format(headline.encode('utf-8').replace('&quot;', '"'))
+            if news: playerNews += " {0}".format(news.encode('utf-8').replace('&quot;', '"'))
+            if impact: playerNews += " {0}".format(impact.encode('utf-8').replace('&quot;', '"'))  #self._remove_accents(impact))
+
+        # finally, lets output. this works with both methods above.
+        output = "{0} :: {1}".format(self._bold(playerName), utils.str.normalizeWhitespace(playerNews))
+        irc.reply(output)
+
+    nflplayernews = wrap(nflplayernews, [('text')])
+
+    def nflgamelog(self, irc, msg, args, optlist, optplayer):
+        """[--year DDDD | --game #] <player>
+
+        Display gamelog from previous or specific game.
+        If --game # is not specified, it tries to print the last gamelog.
+        If --year #### is not specified, it defaults to the current NFL year.
+        Ex: Tom Brady OR --game 2 Eli Manning OR --year 2012 --game 2 Eli Manning
+        """
+
+        # define variables.
+        optgame, optyear = False, None
+        # handle getopts (optlist)
+        if optlist:
+            for (key, value) in optlist:
+                if key == 'year':  # year, test, optdate if true
+                    testdate = self._validate(value, '%Y')
+                    if not testdate:
+                        irc.reply("ERROR: Invalid year. Must be YYYY.")
+                        return
+                    else:
+                        optyear = value #url += 'year/%s' % value
+                if key == 'game':  # what game?
+                    if not 1 <= int(value) <= 21:  # 1->21
+                        irc.reply("ERROR: '{0}' is an invalid game. Must be between 1-21.".format(value))
+                        return
+                    else:  # game was good.
+                        optgame = value
+
+        # now we need to find the player.
+        pf = self._pf("e", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # now we have to find the userid in the url.
+        pidnum = re.findall('\d+', pf)  # extract the digits from the string.
+        # sanity check.
+        if len(pidnum) == 0:
+            irc.reply("ERROR: I could not find a player id in the url: {0}".format(pf))
+            return
+        else:
+            lookupid = pidnum[0]
+        # build and fetch url.
+        if optyear:  # if we have optyear from above:
+            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lkLw==') + '%s/year/%s/' % (lookupid, str(optyear))
+        else:
+            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lkLw==') + '%s/' % (lookupid)
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # first, a sanity check.
+        if 'No stats available.' in html:
+            irc.reply("ERROR: Something broke loading stats for: {0}. Check to make sure year is correct or formatting did not change.".format(optplayer))
+            return
+        # process html. put some additional error checks in because it can be iffy.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        div = soup.find('div', attrs={'class':'mod-container mod-table mod-player-stats'})
+        # more sanity checks.
+        if not div:  # one check.
+            irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
+            return
+        table = div.find('table', attrs={'class':'tablehead'})
+        if not table:  # second check.
+            irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
+            return
+        # we're good so lets grab our html.
+        playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
+        stathead = table.find('tr', attrs={'class':'stathead'}).findAll('td')
+        header = table.find('tr', attrs={'class':'colhead'}).findAll('td')
+        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
+        selectedyear = soup.find('select', attrs={'class':'tablesm'}).find('option', attrs={'selected':'selected'})
+        # last check before we process the data.
+        if len(rows) < 1 or len(header) < 1 or len(stathead) < 1:
+            irc.reply("ERROR: I did not find any gamelog data for: {0} (Check formatting on gamelog page).".format(optplayer))
+            return
+        # now, lets get to processing the data.
+        # this is messy but the only way I thought to handle the colspan situation.
+        # below, we make a list and iterate in order over stathead tds.
+        # statheadlist uses enum to insert, in order found (since the dict gets reordered if you don't)
+        # each entry in statheadlist is a dict of colspan:heading, like:
+        # {0: {'3': '2012 REGULAR SEASON GAME LOG'}, 1: {'10': 'PASSING'}, 2: {'5': 'RUSHING'}}
+        statheaddict = {}
+        for e, blah in enumerate(stathead):
+            tmpdict = {}
+            tmpdict[str(blah['colspan'])] = str(blah.text)
+            statheaddict[e] = tmpdict
+        # now, we have the statheadlist, create statheadlist to be the list of
+        # each header[i] colspan element, where you can use its index value to ref.
+        # so, if header[i] = QBR, the "parent" td colspan is PASSING.
+        # ex: ['2012 REGULAR SEASON GAME LOG', '2012 REGULAR SEASON GAME LOG',
+        # '2012 REGULAR SEASON GAME LOG', 'PASSING', 'PASSING', ... 'RUSHING'
+        statheadlist = []
+        for q, x in sorted(statheaddict.items()):  # sorted dict, x is the "dict" inside.
+            for k, v in x.items():  # key = colspan, v = the td parent header
+                for each in range(int(k)):  # range the number to insert.
+                    # do some replacement (truncating) because we use this in output.
+                    v = v.replace('PASSING','PASS').replace('RUSHING','RUSH').replace('PUNTING','PUNT-')
+                    v = v.replace('RECEIVING','REC').replace('FUMBLES','FUM').replace('TACKLES','TACK')
+                    v = v.replace('INTERCEPTIONS','INT').replace('FIELD GOALS','FG').replace('PATS','XP')
+                    statheadlist.append(v)  # add to list.
+        # now, we put all of the data into a data structure
+        gamelist, games = {}, {}  # gamelist dict. one game per entry. games contains a list incase there is an error.
+        # go through each row and extract, mate with header.
+        for i, row in enumerate(rows):
+            d = {}  # everything in an OD for calc/sort later.
+            tds = row.findAll('td')  # all td in each row.
+            week = i+1  # add in the week but +1 for human reference later.
+            for f,td in enumerate(tds):  # within each round, there are tds w/data.
+                if f > 2:  # the first three will be game log parts, so append statheadlist from above.
+                    if str(statheadlist[f]) == str(header[f].getText()):  # check if key is there like INT so we don't double include
+                        d[header[f].getText()] = td.getText()  # this will just look normal like XPM or INT
+                    else:  # regular "addtiion" where it is something like FUM-FF
+                        d[statheadlist[f] + "-" + header[f].getText()] = td.getText()
+                else:  # td entries 2 and under like DATE, OPP, RESULT
+                    d[header[f].getText()] = td.getText()  # inject all into the OD.
+            # we also add into games so we can print to the user a list of games we have.
+            games[week] = tds[1].getText()
+            # finally, each game and its data in OD now injected into object_list.
+            gamelist[week] = d
+
+        # find optgame if we don't have it.
+        if not optgame:
+            optgame = max(games.keys())  # highest number (or last game)
+        # output time.
+        outputgame = gamelist.get(optgame)
+        if not outputgame:  # handle finding the game or not for output.
+            g = " | ".join([str(k) + ": " + v for (k, v) in sorted(games.items())])
+            irc.reply("ERROR: I did not find game number {0} in {1} for {2}. I do have: {3}".format(optgame, selectedyear.getText(), playername, g))
+            return
+        else:  # we did find an outputgame, so go out.
+            output = " | ".join([self._bold(z) + ": " + x for (z, x) in sorted(outputgame.items())])
+            # finally output on irc.
+            irc.reply("{0} :: W{1} :: {2}".format(self._red(playername), optgame, output))
+
+    nflgamelog = wrap(nflgamelog, [getopts({'year':('int'), 'game':('int')}), ('text')])
+
+    def nflseason(self, irc, msg, args, optlist, optplayer):
+        """[--year DDDD] <player>
+
+        Look up NFL Season stats for a player.
+        To look up a different year, use --year YYYY.
+        Ex: Tom Brady or --year 2010 Tom Brady
+        """
+
+        # handle optinput for season.
+        season = False
+        if optlist:
+            for (key,value) in optlist:
+                if key == 'year': # check our year. validate below.
+                    season = self._validate(str(value), '%Y')
+                    if not season:
+                        irc.reply("ERROR: {0} is an invalid year. Must be YYYY.".format(value))
+                        return
+                    else:
+                        season = str(value)
+        # if we do not have the season, determine the last season and calculate.
+        if not season:
+            if datetime.datetime.now().month < 9:  # if we're before September, last year.
+                season = str(datetime.datetime.now().year - 1)
+            elif datetime.datetime.now().month == "9" and datetime.datetime.now().day < 9:  # before Sept 9th.
+                season = str(datetime.datetime.now().year - 1)
+            else:  # else, use current year.
+                season = str(datetime.datetime.now().year)
+        # now we need to find the player.
+        pf = self._pf("e", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # now we have to find the userid in the url.
+        pidnum = re.findall('\d+', pf)  # extract the digits from the string.
+        # sanity check.
+        if len(pidnum) == 0:
+            irc.reply("ERROR: I could not find a player id in the url: {0}".format(pf))
+            return
+        else:
+            lookupid = pidnum[0]
+        # build and fetch url.
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+            return
+        # sanity check before processing html.
+        if "No stats available." in html:
+            irc.reply("ERROR: No stats available for: {0}".format(optplayer))
+            return
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        if not soup.find('a', attrs={'class':'btn-split-btn'}):  # check if player is active.
+            irc.reply("ERROR: Cannot find any season stats for an inactive/unsigned player: {0}".format(optplayer))
+            return
+        # basics.
+        playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
+        # position. make sure we have it.
+        pos = soup.find('ul', attrs={'class': 'general-info'})
+        if pos:  # we found it.
+            pos = pos.find('li', attrs={'class': 'first'})
+            if pos:  # we found the second part.
+                pos = pos.getText().upper()  # get text and go upper.
+                pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])  # iffy but works.
+            else:  # something went wrong. Check formatting?
+                irc.reply("ERROR: I could not find {0} position. Check formatting.".format(playername))
+                return
+        else:  # something went wrong. Check formatting?
+            irc.reply("ERROR: I could not find {0} position. Check formatting.".format(playername))
+            return
+        # grab the stat categories for this position.
+        statcats = self._postostats(pos)
+        if not statcats:  # something went wrong.
+            irc.reply("ERROR: I don't know what categories to fetch for the {0} category. Check formatting.".format(pos))
+            return
+        # container for output.
+        stats = collections.defaultdict(dict)
+        # find the divs in the html with stats.
+        divs = soup.findAll('div', attrs={'class':'mod-container mod-table mod-player-stats'})
+        for div in divs:  # iterate over
+            #t = collections.defaultdict(dict)
+            stattype = div.find('tr', attrs={'class':'stathead'}).getText().lower().replace(' stats', '')  # stattype.
+            if stattype in statcats:
+                table = div.find('table', attrs={'class':'tablehead'})  # table in each.
+                headings = table.find('tr', attrs={'class':'colhead'}).findAll('td') # headings in each table
+                rows = table.findAll('tr', attrs={'class': re.compile('^oddrow|^evenrow')})  # each row is a year.
+                for row in rows:  # iterate over each row (season)
+                    tds = row.findAll('td')  # grab tds to process.
+                    year = tds[0].getText()  # first row = year
+                    if year == season:  # only grab stats for the year we need. +1 so we don't reprint the season.
+                        yearstats = [self._bold(headings[i+1].getText()) + ": " + n.getText() for (i, n) in enumerate(tds[1:])]
+                        stats[stattype] = yearstats  # inject.
+        # output.
+        if len(stats) == 0:  # this means we didn't find something above. Could be buggy but it's quick.
+            irc.reply("ERROR: I could not find stats in year {0} for {1}".format(season, playername))
+            return
+        # we're good. we found stats. lets print them.
+        output = " || ".join([self._bu(k.title()) + ": " + " ".join([i for i in v]) for (k, v) in stats.items()])
+        irc.reply("{0} :: {1} SEASON :: {2}".format(self._red(playername), season, output))
+
+    nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
+
+    def _postostats(self, pos):
+        """What to look for with each position. For nflcareerstats and nflseason."""
+
+        table = {
+            'QB': ['passing', 'rushing'],
+            'RB': ['rushing', 'receiving'],
+            'FB': ['rushing', 'receiving'],
+            'WR': ['receiving', 'rushing'],
+            'TE': ['receiving', 'rushing'],
+            'DE': ['defensive'],
+            'DT': ['defensive'],
+            'LB': ['defensive'],
+            'CB': ['defensive'],
+            'S': ['defensive'],
+            'PK': ['kicking'],
+            'P': ['punting'] }
+        # now work with the table.
+        if pos in table:
+            return table[pos]
+        else:  # not in table.
+            return None
+
+    def nflcareerstats(self, irc, msg, args, optplayer):
+        """<player>
+
+        Look up NFL career stats for a player.
+        Ex: Tom Brady
+        """
+
+        # now we need to find the player.
+        pf = self._pf("e", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # now we have to find the userid in the url.
+        pidnum = re.findall('\d+', pf)  # extract the digits from the string.
+        # sanity check.
+        if len(pidnum) == 0:
+            irc.reply("ERROR: I could not find a player id in the url: {0}".format(pf))
+            return
+        else:
+            lookupid = pidnum[0]
+        # build and fetch url.
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+            return
+        # one last sanity check before we process html.
+        if "No stats available." in html:
+            irc.reply("No stats available for: {0}. Perhaps they play a position without formal stats?".format(optplayer))
+            return
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        if not soup.find('a', attrs={'class': 'btn-split-btn'}): # check if player is active.
+            irc.reply("ERROR: Cannot find any career stats for an inactive/unsigned player: %s" % optplayer)
+            return
+        # experience.
+        exp = soup.find('span', text="Experience")
+        if exp:
+            exp = exp.findParent('li')
+            exp.span.extract()
+            exp = exp.getText()
+        else:  # didn't find it.
+            exp = "None."
+        # position. make sure we have it.
+        pos = soup.find('ul', attrs={'class': 'general-info'})
+        if pos:  # we found it.
+            pos = pos.find('li', attrs={'class': 'first'})
+            if pos:  # we found the second part.
+                pos = pos.getText().upper()  # get text and go upper.
+                pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])  # iffy but works.
+            else:  # something went wrong. Check formatting?
+                irc.reply("ERROR: I could not find player's position. Check formatting.")
+                return
+        else:  # something went wrong. Check formatting?
+            irc.reply("ERROR: I could not find player's position. Check formatting.")
+            return
+        # basics.
+        playername = soup.find('a', attrs={'class': 'btn-split-btn'}).getText().strip()
+        article = soup.find('div', attrs={'class': 'article'})
+        divs = article.findAll('table', attrs={'class': 'tablehead'})  # each one.
+        # prepare dicts for output
+        stats = {}  # holds the actual stats
+        statcategories = {}  # holds the categories.
+        # expanded careerstats. something can go wrong here but we'll fix when something goes wrong.
+        for f, div in enumerate(divs):
+            if div.find('tr', attrs={'class': 'colhead'}):
+                if not div.find('tr', attrs={'class': 'total'}, text="There are no stats available."):
+                    stathead = div.find('tr', attrs={'class': 'stathead'})
+                    colhead = div.find('tr', attrs={'class': 'colhead'}).findAll('td')[1:]
+                    totals = div.find('tr', attrs={'class': 'total'}).findAll('td')[1:]
+                    tmplist = []
+                    for i, total in enumerate(totals):
+                        tmplist.append(self._bold(colhead[i+1].getText()) + ": " + total.getText())
+                    stats[int(f)] = tmplist
+                    statcategories[str(stathead.getText().replace('Stats', '').strip().lower())] = f
+        # prepare output string.
+        careerstats = {}
+        # grab the stat categories for this position.
+        statcats = self._postostats(pos)
+        if not statcats:  # something went wrong.
+            irc.reply("ERROR: I don't know what categories to fetch for the {0} category. Check formatting.".format(pos))
+            return
+        # we're good so lets process.
+        for each in statcats:  # iterate over what we get back.
+            if each in statcategories:
+                careerstats[each.title()] = " | ".join(stats.get(statcategories[each]))
+        # something went wrong finding those stats.
+        if len(careerstats) == 0:
+            irc.reply("ERROR: I could not find {0} stats for {1}. Check formatting?".format(" ,".join(statcats), playername))
+            return
+        # everything went ok. now output.
+        irc.reply("{0}({1} exp) career stats :: {2}".format(self._red(playername), exp, " || ".join([self._ul(k) + " " + v for (k, v) in careerstats.items()])))
+
+    nflcareerstats = wrap(nflcareerstats, [('text')])
+
+    def nflgame(self, irc, msg, args, optplayer):
+        """<player>
+
+        Display NFL player's game log for current/active/previous game.
+        Ex: Eli Manning
+        """
+
+        # now we need to find the player.
+        pf = self._pf("e", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            return
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # now we have to find the userid in the url.
+        pidnum = re.findall('\d+', pf)  # extract the digits from the string.
+        # sanity check.
+        if len(pidnum) == 0:
+            irc.reply("ERROR: I could not find a player id in the url: {0}".format(pf))
+            return
+        else:
+            lookupid = pidnum[0]
+        # build and fetch url.
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
+            return
+        # sanity check before processing.
+        if "No statistics available." in html:
+            irc.reply("ERROR: No statistics found on the player page for: {0}".format(optplayer.title()))
+            return
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        h4 = soup.find('h4', text="CURRENT GAME")
+        if not h4:
+            h4 = soup.find('h4', text="PREVIOUS GAME")
+            if not h4:
+                irc.reply("ERROR: I could not find game statistics for: {0}. Player not playing? Also try nflgamelog command.".format(optplayer.title()))
+                return
+            else:  # for previous game, find the date/time/status
+                gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
+        else:  # for current game, we should find the game "status"
+            gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
+        # now process html for actual gamestats.
+        div = h4.findParent('div').findParent('div')
+        # find the playername
+        playerName = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'}).find('h1')
+        # team, number and position.
+        playerTeam = soup.find('div', attrs={'class':'player-bio'}).find('ul', attrs={'class':'general-info'}).find('li', attrs={'class':'last'})
+        table = div.find('table', attrs={'class':'tablehead'})
+        # need another sanity check here..
+        if not table:
+            irc.reply("ERROR: I could not find any statistics for: {0}. Sure you typed in the right player?".format(playerName.getText()))
+            return
+        # this is an odd "bug" where a player is active but no stats are displayed.
+        thisgame = table.findAll('tr')[1].find('td')  # 2nd row (first non header) and first cell.
+        if thisgame.getText() != "This Game":
+            irc.reply("ERROR: I could not find any active statistics for: {0} in active game. This happens when player is active for the game but has not played a down.".format(playerName.getText()))
+            return
+        # we did find... continue.
+        header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
+        row = table.findAll('tr')[1].findAll('td')[1:]
+        # output.
+        output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
+        irc.reply("{0} ({1}) :: {2} :: {3}".format(self._red(playerName.getText()), playerTeam.getText(), gametype, output))
+
+    nflgame = wrap(nflgame, [('text')])
+
     ####################
     # PUBLIC FUNCTIONS #
     ####################
@@ -1142,51 +1733,6 @@ class NFL(callbacks.Plugin):
         irc.reply("{0}".format(" | ".join(players)))
 
     nflprobowl = wrap(nflprobowl, [('int')])
-
-    def nflfines(self, irc, msg, args, optlist):
-        """[--num #]
-        Display latest NFL fines. Use --num # to display more than 3.
-        Ex: --num 5
-        """
-
-        # handle optlist/optnumber
-        optnumber = '5'
-        if optlist:
-            for (key, value) in optlist:
-                if key == 'num':  # between 1 and 10, go to 5
-                    if 1 <= value <= 10:
-                        optnumber = '5'
-                    else:
-                        optnumber = value
-        # fetch url.
-        url = self._b64decode('aHR0cDovL3d3dy5qdXN0ZmluZXMuY29t')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # process html. little error checking.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES)
-        heading = soup.find('div', attrs={'class':'title1'})
-        div = soup.find('div', attrs={'class':'standing'})
-        table = div.find('table')
-        rows = table.findAll('tr', attrs={'class':'data'})
-        # container for output.
-        append_list = []
-        # each row is a fine.
-        for row in rows[0:int(optnumber)]:
-            tds = [item.getText() for item in row.findAll('td')]
-            # team = tds[2] # team is broken due to html comments
-            append_list.append("{0} {1} {2} :: {3}".format(tds[0], self._bold(tds[3]), tds[4], tds[5]))
-
-        for i, each in enumerate(append_list[0:int(optnumber)]):
-            if i is 0:  # only for header row.
-                irc.reply("Latest {0} :: Total {1} Fines.".format(heading.getText(), len(rows)))
-                irc.reply(each)
-            else:
-                irc.reply(each)
-
-    nflfines = wrap(nflfines, [getopts({'num':('int')})])
 
     def nflweeklyleaders(self, irc, msg, args):
         """
@@ -2150,10 +2696,30 @@ class NFL(callbacks.Plugin):
         Display the time until the next NFL season starts.
         """
 
-        dDelta = datetime.datetime(2014, 9, 05, 21, 30) - datetime.datetime.now()
-        irc.reply("There are {0} days {1} hours {2} minutes {3} seconds until the start of the 2014 NFL Season.".format(\
-                                            dDelta.days, dDelta.seconds/60/60, dDelta.seconds/60%60, dDelta.seconds%60))
-
+        # base = september first of this year.
+        now, base = datetime.datetime.today(), datetime.datetime(now.year, 9, 1)
+        # so we now take the 'weekday' of September 1st. If it's before Thursday, we add enough days forward
+        # to hit Thursday. If it's after Thursday, we add enough days to get to the next Thursday.
+        wd = base.weekday()
+        # do some timedelta math.
+        if wd == 0: ma = 4
+        elif wd == 1: ma = 3
+        elif wd == 2: ma = 2
+        elif wd == 3: ma = 1
+        elif wd == 4: ma = 0
+        elif wd == 5: ma = 6
+        elif wd == 6: ma = 5
+        # now lets take ma and timedelta. this should be kickoff date unless there is something that pushes it like in 2013.
+        kod = base+datetime.timedelta(days=+(ma))  # date itself. we turn it into localtime below.
+        kot = datetime.datetime(kod.year, kod.month, kod.day, 20, 30)  # if not run in Eastern, it's off. im not doing timezones.
+        # did the kickoff date already pass?
+        if kod < now:  # it passed. this will reset when the year passes.
+            irc.reply("Sorry, the kickoff date for the {0} NFL Season has already passed.".format(now.year))
+        else:  # has not passed. do some math.
+            hl = kot-now
+            irc.reply("There are {0} days, {1} hours, {2} mins, {3} seconds until the start of the {4} season".format(\
+                            hl.days, hl.seconds/60/60, hl.seconds/60%60, hl.seconds%60, now.year))
+            
     nflcountdown = wrap(nflcountdown)
 
     def nfldraft(self, irc, msg, args, optyear, optround):
@@ -2517,637 +3083,6 @@ class NFL(callbacks.Plugin):
             irc.reply("{0} :: {1}".format(self._red(z), " | ".join(y)))
 
     nflgamestats = wrap(nflgamestats, [('text')])
-
-    ########################################
-    # NFL PLAYER DATABASE PUBLIC FUNCTIONS #
-    ########################################
-
-    def nflplayers(self, irc, msg, args, optlist, optname):
-        """<player>
-
-        Search and find NFL players. Must enter exact/approx name since no fuzzy matching is done here.
-        Ex: Tom Brady
-        """
-
-        # handle getopts/optlist input.
-        showFull = False  # setup variables.
-        if optlist:  # if we have input.
-            if 'full' in dict(optlist):  # if --full is specified.
-                showFull = True  # showFull is on.
-
-        optplayer = self._sanitizeName(optname)  # sanitize optname.
-        with sqlite3.connect(self._playersdb) as db:  # connect to db.
-            cursor = db.cursor()  # below, we select eid/rid/fullname %name% and replace spaces in name with %.
-            cursor.execute("SELECT eid, rid, fullname FROM players WHERE fullname LIKE ? ORDER BY eid", ('%'+optplayer.replace(' ','%')+'%',))
-            rows = cursor.fetchall()
-        # check if we found anything.
-        if len(rows) == 0:
-            irc.reply("ERROR: Sorry, I did not find any players matching {0}".format(optname))
-            return
-        # we did find stuff, so. otherwise, output.
-        if not showFull:  # regular search, no full results.
-            irc.reply("Matching players found({0}): {1}".format(len(rows), " | ".join(sorted([i[2] for i in rows]))))
-        else:  # show full results.
-            for i, row in enumerate(rows):  # iterate through. eid=row[0], rid=row[1], fullname=row[2]
-                rowout = "| {0:6} | {1:6} | {2:30} |".format(row[0], row[1], row[2])
-                if i == 0:  # first row. so we want our header below.
-                    irc.reply("| {0:>6} | {1:>6} | {2:<30} |".format("EID","RID","NAME"))
-                    irc.reply("|{0:{1}<8}|{0:{1}<8}|{0:{1}<32}|".format("", "-"))
-                    irc.reply(rowout)
-                elif i == 6:  # if we're here, we already printed 5 results.
-                    irc.reply("Sorry, I found too many results for '{0}' (Total: {1}). Try something more specific.".format(optname, len(rows)))
-                    break
-                else:  # all other rows.
-                    irc.reply(rowout)
-
-    nflplayers = wrap(nflplayers, [getopts({'full':''}), ('text')])
-
-    def nflplayernews(self, irc, msg, args, optplayer):
-        """<player>
-
-        Display latest news for NFL player.
-        Ex: Tom Brady
-        """
-
-        useSPN = False  # simple bypass as I found wrold but am not sure how long it will work.
-        if useSPN:  # conditional to use SPN here. We'll use rworld.
-            if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-                lookupid = optplayer  # if it is, set.
-            else:  # else, lookup the playername.
-                lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
-                if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                    related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                    irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                    return
-            # build and fetch url.
-            url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL3BsYXllcnVwZGF0ZQ==') + '?playerId=%s&wjb=' % lookupid
-            html = self._httpget(url)
-            if not html:
-                irc.reply("ERROR: Failed to fetch {0}.".format(url))
-                self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-                return
-            # process html.
-            soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-            playerName = soup.find('div', attrs={'class': 'sub bold'})
-            if not playerName:  # sanity check here.
-                irc.reply("I could not find any news. Did formatting change?")
-                return
-            else:  # get their formal name.
-                playerName = playerName.getText()
-            # find the div where "news" is in.
-            if soup.find('div', attrs={'class': 'ind line'}):
-                playerNews = soup.find('div', attrs={'class': 'ind line'})
-                extraPlayerNews = playerNews.find('div', attrs={'style': 'font-style:italic;'})
-                if extraPlayerNews:  # clean it up.
-                    extraPlayerNews.extract()
-                    playerNews = self._remove_accents(playerNews.getText())
-                else:
-                    playerNews = "No news found for player."
-        else:  # use rworld.
-            if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-                lookupid = optplayer  # set the id as the digit itself.
-            else:  # else, lookup the playername.
-                lookupid = self._playerLookup('rid', optplayer)  # we get a str back or list. str="found", list="not found".
-                if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                    related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                    irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                    return
-                # make sure it's valid.
-                if lookupid == '':
-                    irc.reply("ERROR: I do not have a valid RID for {0}. My apologies.".format(optplayer))
-                    return
-            # all is good. lets go.
-            # build and fetch url.
-            url = self._b64decode('aHR0cDovL2Rldi5yb3Rvd29ybGQuY29tL3NlcnZpY2VzL21vYmlsZS5hc214L0dldEpTT05TaW5nbGVQbGF5ZXJOZXdzP3Nwb3J0PU5GTA==') + '&playerid=%s' % lookupid
-            html = self._httpget(url)
-            if not html:
-                irc.reply("ERROR: Failed to fetch {0}.".format(url))
-                self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-                return
-            # parse json
-            jsondata = json.loads(html)
-            # check to make sure we have news and build output string.
-            if len(jsondata) < 1:  # generic error here.
-                playerNews = "I did not find any news for player."
-            else:  # we did find some playernews.
-                jsondata = jsondata[0]
-                playerName = jsondata['FirstName'] + " " + jsondata['LastName']
-                timestamp = jsondata.get('TimeStamp')  # RawTimeStamp
-                headline = jsondata.get('Headline')
-                impact = jsondata.get('Impact')
-                news = jsondata.get('News')
-                # now construct playernews string for output.
-                playerNews = ""
-                if timestamp: playerNews += "{0}".format(timestamp)
-                if headline: playerNews += " {0}".format(headline.encode('utf-8').replace('&quot;', '"'))
-                if news: playerNews += " {0}".format(news.encode('utf-8').replace('&quot;', '"'))
-                if impact: playerNews += " {0}".format(impact.encode('utf-8').replace('&quot;', '"'))  #self._remove_accents(impact))
-
-        # finally, lets output. this works with both methods above.
-        output = "{0} :: {1}".format(self._red(playerName), utils.str.normalizeWhitespace(playerNews))
-        irc.reply(output)
-
-    nflplayernews = wrap(nflplayernews, [('text')])
-
-    def nflinfo(self, irc, msg, args, optplayer):
-        """<player>
-
-        Display basic information on NFL player.
-        Ex: Tom Brady
-        """
-
-        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-            lookupid = optplayer  # if it is, set.
-        else:  # else, lookup the playername.
-            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
-            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZC8=') + '%s' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-        # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        # find the main div
-        div = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'})
-        if not div:
-            irc.reply("ERROR: I could not find active information for player.")
-            return
-        playerName = div.find('h1')
-        # setup our output container with the name.
-        out = []
-        # basic stats.
-        stats = div.find('ul', attrs={'class':'general-info'})
-        for stat in stats:  # iterate over and add the text.
-            out.append(stat.getText())
-        # find the rest of the bio
-        bios = div.find('ul', attrs={'class':'player-metadata floatleft'}).findAll('li')
-        for bios in bios:
-            cat = bios.find('span')  # span is the category.
-            cat.extract()  # now extract the span because bios = rest of text we want.
-            out.append("{0}: {1}".format(cat.getText(), bios.getText()))
-        # prepare output.
-        descstring = " | ".join([item for item in out])
-        output = "{0} :: {1}".format(self._red(playerName.getText()), descstring)
-        irc.reply(output)
-
-    nflinfo = wrap(nflinfo, [('text')])
-
-    def nflcontract(self, irc, msg, args, optplayer):
-        """<player>
-
-        Display NFL contract for player.
-        Ex: Tom Brady
-        """
-
-        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-            lookupid = optplayer  # if it is, set.
-        else:  # else, lookup the playername.
-            lookupid = self._playerLookup('rid', optplayer)  # we get a str back or list. str="found", list="not found".
-            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                return
-        # sanity check for rid because I sometimes lack them.
-        if lookupid == '':
-            irc.reply("ERROR: I have {0} in the DB but no RID for them. Please visit roto for the player's contract.".format(optplayer))
-            return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL3d3dy5yb3Rvd29ybGQuY29tL3BsYXllci9uZmwv') + '%s/' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-        # process HTML.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        pn = soup.find('div', attrs={'class':'playercard', 'style':'display:none;', 'id': re.compile('^cont_.*')})
-        if not pn:  # check and make sure we have a contract.
-            irc.reply("ERROR: No contract found for: {0}".format(optplayer))
-            return
-        # format/parse html.
-        h1 = soup.find('h1').getText().split('|',1)[0].strip()
-        p1 = pn.find('div', attrs={'class': 'report'}).getText()
-        contract = re.sub('<[^<]+?>', '', p1).strip()
-        contract = utils.str.normalizeWhitespace(contract)  # kill double spacing.
-        # output
-        irc.reply("{0} :: {1}".format(self._red(h1), contract))
-
-    nflcontract = wrap(nflcontract, [('text')])
-
-    def nflgame(self, irc, msg, args, optplayer):
-        """<player>
-
-        Display NFL player's game log for current/active/previous game.
-        Ex: Eli Manning
-        """
-
-        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-            lookupid = optplayer  # if it is, set.
-        else:  # else, lookup the playername.
-            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
-            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvXy9pZA==') + '/%s/' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-        # sanity check before processing.
-        if "No statistics available." in html:
-            irc.reply("ERROR: No statistics found on the player page for: {0}".format(optplayer.title()))
-            return
-        # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        h4 = soup.find('h4', text="CURRENT GAME")
-        if not h4:
-            h4 = soup.find('h4', text="PREVIOUS GAME")
-            if not h4:
-                irc.reply("ERROR: I could not find game statistics for: {0}. Player not playing? Also try nflgamelog command.".format(optplayer.title()))
-                return
-            else:  # for previous game, find the date/time/status
-                gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
-        else:  # for current game, we should find the game "status"
-            gametype = soup.find('div', attrs={'class':'time'}).getText(separator=' ')
-        # now process html for actual gamestats.
-        div = h4.findParent('div').findParent('div')
-        # find the playername
-        playerName = soup.find('div', attrs={'class':'mod-container mod-no-header-footer mod-page-header'}).find('h1')
-        # team, number and position.
-        playerTeam = soup.find('div', attrs={'class':'player-bio'}).find('ul', attrs={'class':'general-info'}).find('li', attrs={'class':'last'})
-        table = div.find('table', attrs={'class':'tablehead'})
-        # need another sanity check here..
-        if not table:
-            irc.reply("ERROR: I could not find any statistics for: {0}. Sure you typed in the right player?".format(playerName.getText()))
-            return
-        # this is an odd "bug" where a player is active but no stats are displayed.
-        thisgame = table.findAll('tr')[1].find('td')  # 2nd row (first non header) and first cell.
-        if thisgame.getText() != "This Game":
-            irc.reply("ERROR: I could not find any active statistics for: {0} in active game. This happens when player is active for the game but has not played a down.".format(playerName.getText()))
-            return
-        # we did find... continue.
-        header = table.find('tr', attrs={'class':'colhead'}).findAll('th')[1:]
-        row = table.findAll('tr')[1].findAll('td')[1:]
-        # output.
-        output = " | ".join([self._bold(each.getText()) + ": " + row[i].getText() for i, each in enumerate(header)])
-        irc.reply("{0} ({1}) :: {2} :: {3}".format(self._red(playerName.getText()), playerTeam.getText(), gametype, output))
-
-    nflgame = wrap(nflgame, [('text')])
-
-    def _postostats(self, pos):
-        """What to look for with each position. For nflcareerstats and nflseason."""
-
-        table = {
-            'QB': ['passing', 'rushing'],
-            'RB': ['rushing', 'receiving'],
-            'FB': ['rushing', 'receiving'],
-            'WR': ['receiving', 'rushing'],
-            'TE': ['receiving', 'rushing'],
-            'DE': ['defensive'],
-            'DT': ['defensive'],
-            'LB': ['defensive'],
-            'CB': ['defensive'],
-            'S': ['defensive'],
-            'PK': ['kicking'],
-            'P': ['punting'] }
-        # now work with the table.
-        if pos in table:
-            return table[pos]
-        else:  # not in table.
-            return None
-
-    def nflcareerstats(self, irc, msg, args, optplayer):
-        """<player>
-
-        Look up NFL career stats for a player.
-        Ex: Tom Brady
-        """
-
-        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-            lookupid = optplayer  # if it is, set.
-        else:  # else, lookup the playername.
-            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
-            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-        # one last sanity check before we process html.
-        if "No stats available." in html:
-            irc.reply("No stats available for: {0}. Perhaps they play a position without formal stats?".format(optplayer))
-            return
-        # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        if not soup.find('a', attrs={'class': 'btn-split-btn'}): # check if player is active.
-            irc.reply("ERROR: Cannot find any career stats for an inactive/unsigned player: %s" % optplayer)
-            return
-        # experience.
-        exp = soup.find('span', text="Experience")
-        if exp:
-            exp = exp.findParent('li')
-            exp.span.extract()
-            exp = exp.getText()
-        else:  # didn't find it.
-            exp = "None."
-        # position. make sure we have it.
-        pos = soup.find('ul', attrs={'class': 'general-info'})
-        if pos:  # we found it.
-            pos = pos.find('li', attrs={'class': 'first'})
-            if pos:  # we found the second part.
-                pos = pos.getText().upper()  # get text and go upper.
-                pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])  # iffy but works.
-            else:  # something went wrong. Check formatting?
-                irc.reply("ERROR: I could not find player's position. Check formatting.")
-                return
-        else:  # something went wrong. Check formatting?
-            irc.reply("ERROR: I could not find player's position. Check formatting.")
-            return
-        # basics.
-        playername = soup.find('a', attrs={'class': 'btn-split-btn'}).getText().strip()
-        article = soup.find('div', attrs={'class': 'article'})
-        divs = article.findAll('table', attrs={'class': 'tablehead'})  # each one.
-        # prepare dicts for output
-        stats = {}  # holds the actual stats
-        statcategories = {}  # holds the categories.
-        # expanded careerstats. something can go wrong here but we'll fix when something goes wrong.
-        for f, div in enumerate(divs):
-            if div.find('tr', attrs={'class': 'colhead'}):
-                if not div.find('tr', attrs={'class': 'total'}, text="There are no stats available."):
-                    stathead = div.find('tr', attrs={'class': 'stathead'})
-                    colhead = div.find('tr', attrs={'class': 'colhead'}).findAll('td')[1:]
-                    totals = div.find('tr', attrs={'class': 'total'}).findAll('td')[1:]
-                    tmplist = []
-                    for i, total in enumerate(totals):
-                        tmplist.append(self._bold(colhead[i+1].getText()) + ": " + total.getText())
-                    stats[int(f)] = tmplist
-                    statcategories[str(stathead.getText().replace('Stats', '').strip().lower())] = f
-        # prepare output string.
-        careerstats = {}
-        # grab the stat categories for this position.
-        statcats = self._postostats(pos)
-        if not statcats:  # something went wrong.
-            irc.reply("ERROR: I don't know what categories to fetch for the {0} category. Check formatting.".format(pos))
-            return
-        # we're good so lets process.
-        for each in statcats:  # iterate over what we get back.
-            if each in statcategories:
-                careerstats[each.title()] = " | ".join(stats.get(statcategories[each]))
-        # something went wrong finding those stats.
-        if len(careerstats) == 0:
-            irc.reply("ERROR: I could not find {0} stats for {1}. Check formatting?".format(" ,".join(statcats), playername))
-            return
-        # everything went ok. now output.
-        irc.reply("{0}({1} exp) career stats :: {2}".format(self._red(playername), exp, " || ".join([self._ul(k) + " " + v for (k, v) in careerstats.items()])))
-
-    nflcareerstats = wrap(nflcareerstats, [('text')])
-
-    def nflseason(self, irc, msg, args, optlist, optplayer):
-        """[--year DDDD] <player>
-
-        Look up NFL Season stats for a player.
-        To look up a different year, use --year YYYY.
-        Ex: Tom Brady or --year 2010 Tom Brady
-        """
-
-        # handle optinput for season.
-        season = False
-        if optlist:
-            for (key,value) in optlist:
-                if key == 'year': # check our year. validate below.
-                    season = self._validate(str(value), '%Y')
-                    if not season:
-                        irc.reply("ERROR: {0} is an invalid year. Must be YYYY.".format(value))
-                        return
-                    else:
-                        season = str(value)
-        # if we do not have the season, determine the last season and calculate.
-        if not season:
-            if datetime.datetime.now().month < 9:  # if we're before September, last year.
-                season = str(datetime.datetime.now().year - 1)
-            elif datetime.datetime.now().month == "9" and datetime.datetime.now().day < 9:  # before Sept 9th.
-                season = str(datetime.datetime.now().year - 1)
-            else:  # else, use current year.
-                season = str(datetime.datetime.now().year)
-        # now that we have the season, lookup the player.
-        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-            lookupid = optplayer  # if it is, set.
-        else:  # else, lookup the playername.
-            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
-            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvc3RhdHMvXy9pZA==') + '/%s/' % lookupid
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0} looking up {1}".format(url, optplayer))
-            return
-        # sanity check before processing html.
-        if "No stats available." in html:
-            irc.reply("ERROR: No stats available for: {0}".format(optplayer))
-            return
-        # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        if not soup.find('a', attrs={'class':'btn-split-btn'}):  # check if player is active.
-            irc.reply("ERROR: Cannot find any season stats for an inactive/unsigned player: {0}".format(optplayer))
-            return
-        # basics.
-        playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
-        # position. make sure we have it.
-        pos = soup.find('ul', attrs={'class': 'general-info'})
-        if pos:  # we found it.
-            pos = pos.find('li', attrs={'class': 'first'})
-            if pos:  # we found the second part.
-                pos = pos.getText().upper()  # get text and go upper.
-                pos = ''.join([eachLetter for eachLetter in pos if eachLetter.isalpha()])  # iffy but works.
-            else:  # something went wrong. Check formatting?
-                irc.reply("ERROR: I could not find {0} position. Check formatting.".format(playername))
-                return
-        else:  # something went wrong. Check formatting?
-            irc.reply("ERROR: I could not find {0} position. Check formatting.".format(playername))
-            return
-        # grab the stat categories for this position.
-        statcats = self._postostats(pos)
-        if not statcats:  # something went wrong.
-            irc.reply("ERROR: I don't know what categories to fetch for the {0} category. Check formatting.".format(pos))
-            return
-        # container for output.
-        stats = collections.defaultdict(dict)
-        # find the divs in the html with stats.
-        divs = soup.findAll('div', attrs={'class':'mod-container mod-table mod-player-stats'})
-        for div in divs:  # iterate over
-            #t = collections.defaultdict(dict)
-            stattype = div.find('tr', attrs={'class':'stathead'}).getText().lower().replace(' stats', '')  # stattype.
-            if stattype in statcats:
-                table = div.find('table', attrs={'class':'tablehead'})  # table in each.
-                headings = table.find('tr', attrs={'class':'colhead'}).findAll('td') # headings in each table
-                rows = table.findAll('tr', attrs={'class': re.compile('^oddrow|^evenrow')})  # each row is a year.
-                for row in rows:  # iterate over each row (season)
-                    tds = row.findAll('td')  # grab tds to process.
-                    year = tds[0].getText()  # first row = year
-                    if year == season:  # only grab stats for the year we need. +1 so we don't reprint the season.
-                        yearstats = [self._bold(headings[i+1].getText()) + ": " + n.getText() for (i, n) in enumerate(tds[1:])]
-                        stats[stattype] = yearstats  # inject.
-        # output.
-        if len(stats) == 0:  # this means we didn't find something above. Could be buggy but it's quick.
-            irc.reply("ERROR: I could not find stats in year {0} for {1}".format(season, playername))
-            return
-        # we're good. we found stats. lets print them.
-        output = " || ".join([self._bu(k.title()) + ": " + " ".join([i for i in v]) for (k, v) in stats.items()])
-        irc.reply("{0} :: {1} SEASON :: {2}".format(self._red(playername), season, output))
-
-    nflseason = wrap(nflseason, [(getopts({'year': ('int')})), ('text')])
-
-    def nflgamelog(self, irc, msg, args, optlist, optplayer):
-        """[--year DDDD | --game #] <player>
-
-        Display gamelog from previous or specific game.
-        If --game # is not specified, it tries to print the last gamelog.
-        If --year #### is not specified, it defaults to the current NFL year.
-        Ex: Tom Brady OR --game 2 Eli Manning OR --year 2012 --game 2 Eli Manning
-        """
-
-        # define variables.
-        optgame, optyear = False, None
-        # handle getopts (optlist)
-        if optlist:
-            for (key, value) in optlist:
-                if key == 'year':  # year, test, optdate if true
-                    testdate = self._validate(value, '%Y')
-                    if not testdate:
-                        irc.reply("ERROR: Invalid year. Must be YYYY.")
-                        return
-                    else:
-                        optyear = value #url += 'year/%s' % value
-                if key == 'game':  # what game?
-                    if not 1 <= int(value) <= 21:  # 1->21
-                        irc.reply("ERROR: '{0}' is an invalid game. Must be between 1-21.".format(value))
-                        return
-                    else:  # game was good.
-                        optgame = value
-
-        # now lookup the player.
-        if optplayer.isdigit():  # test if we get a num, so we bypass the playerlookup.
-            lookupid = optplayer  # if it is, set.
-        else:  # else, lookup the playername.
-            lookupid = self._playerLookup('eid', optplayer)  # we get a str back or list. str="found", list="not found".
-            if isinstance(lookupid, list):  # if we have a list back, it means something is wrong.
-                related = ' | '.join([i['fullname'].title() for i in lookupid])  # join just the fullnames in Title.
-                irc.reply("ERROR: No player found for: '{0}'. Maybe you were looking for: {1}".format(optplayer, related))
-                return
-
-        # build and fetch url.
-        if optyear:  # if we have optyear from above:
-            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lkLw==') + '%s/year/%s/' % (lookupid, str(optyear))
-        else:
-            url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wbGF5ZXIvZ2FtZWxvZy9fL2lkLw==') + '%s/' % (lookupid)
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # first, a sanity check.
-        if 'No stats available.' in html:
-            irc.reply("ERROR: Something broke loading stats for: {0}. Check to make sure year is correct or formatting did not change.".format(optplayer))
-            return
-        # process html. put some additional error checks in because it can be iffy.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        div = soup.find('div', attrs={'class':'mod-container mod-table mod-player-stats'})
-        # more sanity checks.
-        if not div:  # one check.
-            irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
-            return
-        table = div.find('table', attrs={'class':'tablehead'})
-        if not table:  # second check.
-            irc.reply("ERROR: Something broke loading the gamelog. Player might have no stats or gamelog due to position.")
-            return
-        # we're good so lets grab our html.
-        playername = soup.find('a', attrs={'class':'btn-split-btn'}).getText().strip()
-        stathead = table.find('tr', attrs={'class':'stathead'}).findAll('td')
-        header = table.find('tr', attrs={'class':'colhead'}).findAll('td')
-        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow.*?|^evenrow.*?')})
-        selectedyear = soup.find('select', attrs={'class':'tablesm'}).find('option', attrs={'selected':'selected'})
-        # last check before we process the data.
-        if len(rows) < 1 or len(header) < 1 or len(stathead) < 1:
-            irc.reply("ERROR: I did not find any gamelog data for: {0} (Check formatting on gamelog page).".format(optplayer))
-            return
-        # now, lets get to processing the data.
-        # this is messy but the only way I thought to handle the colspan situation.
-        # below, we make a list and iterate in order over stathead tds.
-        # statheadlist uses enum to insert, in order found (since the dict gets reordered if you don't)
-        # each entry in statheadlist is a dict of colspan:heading, like:
-        # {0: {'3': '2012 REGULAR SEASON GAME LOG'}, 1: {'10': 'PASSING'}, 2: {'5': 'RUSHING'}}
-        statheaddict = {}
-        for e, blah in enumerate(stathead):
-            tmpdict = {}
-            tmpdict[str(blah['colspan'])] = str(blah.text)
-            statheaddict[e] = tmpdict
-        # now, we have the statheadlist, create statheadlist to be the list of
-        # each header[i] colspan element, where you can use its index value to ref.
-        # so, if header[i] = QBR, the "parent" td colspan is PASSING.
-        # ex: ['2012 REGULAR SEASON GAME LOG', '2012 REGULAR SEASON GAME LOG',
-        # '2012 REGULAR SEASON GAME LOG', 'PASSING', 'PASSING', ... 'RUSHING'
-        statheadlist = []
-        for q, x in sorted(statheaddict.items()):  # sorted dict, x is the "dict" inside.
-            for k, v in x.items():  # key = colspan, v = the td parent header
-                for each in range(int(k)):  # range the number to insert.
-                    # do some replacement (truncating) because we use this in output.
-                    v = v.replace('PASSING','PASS').replace('RUSHING','RUSH').replace('PUNTING','PUNT-')
-                    v = v.replace('RECEIVING','REC').replace('FUMBLES','FUM').replace('TACKLES','TACK')
-                    v = v.replace('INTERCEPTIONS','INT').replace('FIELD GOALS','FG').replace('PATS','XP')
-                    statheadlist.append(v)  # add to list.
-        # now, we put all of the data into a data structure
-        gamelist, games = {}, {}  # gamelist dict. one game per entry. games contains a list incase there is an error.
-        # go through each row and extract, mate with header.
-        for i, row in enumerate(rows):
-            d = {}  # everything in an OD for calc/sort later.
-            tds = row.findAll('td')  # all td in each row.
-            week = i+1  # add in the week but +1 for human reference later.
-            for f,td in enumerate(tds):  # within each round, there are tds w/data.
-                if f > 2:  # the first three will be game log parts, so append statheadlist from above.
-                    if str(statheadlist[f]) == str(header[f].getText()):  # check if key is there like INT so we don't double include
-                        d[header[f].getText()] = td.getText()  # this will just look normal like XPM or INT
-                    else:  # regular "addtiion" where it is something like FUM-FF
-                        d[statheadlist[f] + "-" + header[f].getText()] = td.getText()
-                else:  # td entries 2 and under like DATE, OPP, RESULT
-                    d[header[f].getText()] = td.getText()  # inject all into the OD.
-            # we also add into games so we can print to the user a list of games we have.
-            games[week] = tds[1].getText()
-            # finally, each game and its data in OD now injected into object_list.
-            gamelist[week] = d
-
-        # find optgame if we don't have it.
-        if not optgame:
-            optgame = max(games.keys())  # highest number (or last game)
-        # output time.
-        outputgame = gamelist.get(optgame)
-        if not outputgame:  # handle finding the game or not for output.
-            g = " | ".join([str(k) + ": " + v for (k, v) in sorted(games.items())])
-            irc.reply("ERROR: I did not find game number {0} in {1} for {2}. I do have: {3}".format(optgame, selectedyear.getText(), playername, g))
-            return
-        else:  # we did find an outputgame, so go out.
-            output = " | ".join([self._bold(z) + ": " + x for (z, x) in sorted(outputgame.items())])
-            # finally output on irc.
-            irc.reply("{0} :: W{1} :: {2}".format(self._red(playername), optgame, output))
-
-    nflgamelog = wrap(nflgamelog, [getopts({'year':('int'), 'game':('int')}), ('text')])
 
 Class = NFL
 
