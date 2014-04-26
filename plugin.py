@@ -157,14 +157,6 @@ class NFL(callbacks.Plugin):
             i -= integer * count
         return ''.join(result)
 
-    def _millify(self, num):
-        """Turns a number like 1,000,000 into 1M."""
-
-        for unit in ['','k','M','B','T']:
-            if num < 1000.0:
-                return "%3.3f%s" % (num, unit)
-            num /= 1000.0
-
     def _shortenUrl(self, url):
         """Shortens a long URL into a short one."""
 
@@ -182,44 +174,33 @@ class NFL(callbacks.Plugin):
         """
 
         try:  # to be safe, wrap in a giant try/except block.    
-            
-            s = s.replace(',', '').replace('$', '')  # remove $ and ,
+            s = s.replace(',', '').replace('$', '').strip()  # remove $ and ,
+            # are we negative?
+            if s.startswith('-'):
+                negative = True
+                s = s.replace('-','')
+            else: # not
+                negative = False
+            # main routine.
             suffixes_table = [('',0),('k',0),('M',1),('B',2),('T',2), ('Z',2)]
             num = float(s)
             for suffix, precision in suffixes_table:
                 if num < 1000.0:
                     break
                 num /= 1000.0
-        
+            # precision.
             if precision == 0:
                 formatted_size = "%d" % num
             else:
                 formatted_size = str(round(num, ndigits=precision))
-        
+            # should we reattach - (neg num)?
+            if negative:
+                formatted_size = "-" + formatted_size
+            # now return.
             return "%s%s" % (formatted_size, suffix)
         except Exception, e:
             self.log.info("_hs: ERROR trying to format: {0} :: {1}".format(s, e))
             return s
-    
-    def _format_cap(self, figure):
-        """Format cap numbers for dealing with numbers command."""
-
-        figure = figure.replace(',', '').strip()  # remove commas.
-        if figure.startswith('-'):  # figure out if we're a negative number.
-            negative = True
-            figure = figure.replace('-','')
-        else:
-            negative = False
-
-        try:  # try and millify.
-            figure = self._millify(float(figure))
-        except:  # return what we have if it breaks
-            figure = figure
-
-        if negative:
-            figure = "-" + figure
-        # now return
-        return figure
 
     ####################################
     # INTERNAL TEAM DATABASE FUNCTIONS #
@@ -2126,7 +2107,7 @@ class NFL(callbacks.Plugin):
         # need the specific spotrac for the url.
         lookupteam = self._translateTeam('spotrac', 'team', optteam)
         # fetch url.
-        url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwv') + '%s/cap-hit/' % lookupteam
+        url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwv') + '%s/cap/' % lookupteam
         html = self._httpget(url)  #, h={"Content-type": "application/x-www-form-urlencoded"}, d={'ajax':'1'})
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
@@ -2135,30 +2116,28 @@ class NFL(callbacks.Plugin):
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
         teamtitle = soup.find('title')
-        basespan = soup.find('span', text="Cap Space")  # we derive the tbody via a specific span.
-        tbody = basespan.findParent('tbody')  # find the proper tbody.
-        ztrs = tbody.findAll('tr') # inside that tbody, we have to do some disgusting regex.
-        # create the container to dump the shit we want in it.
-        trs = []
-        # have to change this -- again. disgusting but stops all the changing on the site.
-        for ztr in ztrs:  # go over our row.
-            ztds = ztr.findAll('td')  # in each row, look at the tds class.
-            if ztds:  # make sure there are tds in the tr.
-                for f in ztds:  # iterate over those tds now.
-                    if f['class'] == "total team total-title":  # very specific td class we're looking for.
-                        parent = f.findParent('tr')  # find the td's parent.
-                        trs.append(parent)  # append the parent into our trs list container.
-                        break  # break out of the tds so we don't inject multiple trs.
-        # container for output.
+        # blank list for container
         capfigs = []
-        # now iterate over these.
-        for tr in trs:
-            tds = tr.findAll('td')  # find all td in tr.
-            n = self._bold(tds[0].getText().encode('utf-8'))  # bold title.
-            f = self._format_cap(tds[-1].getText().encode('utf-8'))  # format cap figure.
-            capfigs.append("{0}: {1}".format(n, f))  # append to list.
-        # now format output.
-        output = "{0} :: {1}".format(self._red(teamtitle.getText()), " | ".join([i for i in capfigs]))
+        # ugh, this keeps changing. find the two bottom tds that matter.
+        headerrow = soup.find('th', text={'Cap Totals'}).findParent('tr')
+        firsttd = soup.find('td', attrs={'class':'total bottom figure'}).findParent('tr')
+        secondtd = soup.find('td', text={'Cap Space'}).findParent('tr')
+        #self.log.info("{0}".format(secondtd))
+        # grab our cells from each tr.
+        headerths = headerrow.findAll('th')
+        firsttds = firsttd.findAll('td')[1:]  # grab all the tds. skip the first.
+        # use firsttd + headerrow.
+        for (i, f) in enumerate(firsttds):
+            h = headerths[i+1].getText().encode('utf-8')  # +1 to mate the skip properly.
+            z = f.getText().encode('utf-8')
+            if z != "" and z != "-":  # don't add blanks. format cap sizes.
+                z = self._hs(z)
+                capfigs.append("{0}: {1}".format(h, z))
+        # last. grab capspace.
+        cs = secondtd.findAll('td')[-1].getText().encode('utf-8')  # tr, findAll td, last td. format it.
+        capfigs.append("{0}: {1}".format(self._bu("CAP SPACE:"), self._hs(cs)))
+        # output.
+        output = "{0} :: {1}".format(self._bold(teamtitle.getText()), " | ".join([i for i in capfigs]))
         irc.reply(output)
 
     nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
