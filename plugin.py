@@ -16,7 +16,7 @@ import sqlite3  # db.
 import os.path  # db.
 import unicodedata
 import jellyfish  # matching.
-from metaphone import doublemetaphone  # matching.
+#from metaphone import doublemetaphone  # matching.
 # supybot libs
 import supybot.utils as utils
 from supybot.commands import *
@@ -34,7 +34,6 @@ class NFL(callbacks.Plugin):
         self.__parent = super(NFL, self)
         self.__parent.__init__(irc)
         self._nfldb = os.path.abspath(os.path.dirname(__file__)) + '/db/nfl.db'
-        self._playersdb = os.path.abspath(os.path.dirname(__file__)) + '/db/nfl_players.db'
 
     def die(self):
         self.__parent.die()
@@ -273,118 +272,49 @@ class NFL(callbacks.Plugin):
     def _similarPlayers(self, optname):
         """Return a dict containing the five most similar players based on optname."""
 
-        optname = self._sanitizeName(optname)  # first sanitize input to compare.
+        # thanks to BurntSushi here with great work on this.
+        #
+        url = 'https://raw.githubusercontent.com/BurntSushi/nflgame/master/nflgame/players.json'
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.info("ERROR opening {0}".format(url))
+            return None
+        # now that we have the list, lets parse the json.
+        try:
+            j = json.loads(html)
+        except Exception, e:
+            self.log.info("ERROR: _similarPlayers :: Could not parse players.json :: {0}".format(e))
+            return None
+        # test length.
+        if len(j) == 0:
+            self.log.info("ERROR: _similarPlayers :: length 0. Could not find any players in players.json.")
+            return None
+        # ok, finally, lets go.
+        # fndm = doublemetaphone(namesplit[0])  # get our list of first-name dm.
+        # lndm = doublemetaphone(namesplit[1])  # get our list of last-name dm.
+        optname = self._sanitizeName(optname)  # sanitizename.
         jaro, damerau = [], []  # empty lists to put our results in.
-        # now do our sql work.
-        with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()  # select all fullnames, eid, rid.
-            cursor.execute("SELECT fullname, eid, rid FROM players")
-            rows = cursor.fetchall()
-        # close. iterate over all rows and do math.
-        for row in rows:  # row[0] = fullname, row[1] = eid, row[2] = rid
-            jaroscore = jellyfish.jaro_distance(optname, row[0])  # jaro.
-            damerauscore = jellyfish.damerau_levenshtein_distance(optname, row[0])  #dld
-            jaro.append({'jaro':jaroscore, 'fullname':row[0], 'eid':row[1], 'rid':row[2]})  # add dict to list.
-            damerau.append({'damerau':damerauscore, 'fullname':row[0], 'eid':row[1], 'rid':row[2]})  # ibid.
+        # now we create the container to iterate over.
+        names = [{'fullname': self._sanitizeName(v['full_name']), 'id':v['profile_id']} for v in j.values()]  # full_name # last_name # first_name
+        # iterate over the entries.
+        for row in names:  # list of dicts.
+            jaroscore = jellyfish.jaro_distance(optname, row['fullname'])  # jaro.
+            damerauscore = jellyfish.damerau_levenshtein_distance(optname, row['fullname'])  #dld
+            jaro.append({'jaro':jaroscore, 'fullname':row['fullname'], 'id':row['id']})  # add dict to list.
+            damerau.append({'damerau':damerauscore, 'fullname':row['fullname'], 'id':row['id']})  # ibid.
         # now, we do two "sorts" to find the "top5" matches. reverse is opposite on each.
         jarolist = sorted(jaro, key=itemgetter('jaro'), reverse=True)[0:5]  # bot five.
         dameraulist = sorted(damerau, key=itemgetter('damerau'), reverse=False)[0:5]  # top five.
         # we now have two lists, top5 sorted, and need to do some further things.
         # now, lets iterate through both lists. match if both are in it. (better matches)
-        matching = [k for k in jarolist if k['eid'] in [f['eid'] for f in dameraulist]]
+        matching = [k for k in jarolist if k['id'] in [f['id'] for f in dameraulist]]
         # now, test if we have anything. better matches will have more.
         if len(matching) == 0:  # we have NO matches. grab the top two from jaro/damerau (for error str)
             matching = [jarolist[0], dameraulist[0], jarolist[1], dameraulist[1]]
-            self.log.info("NO MATCHES " + str(matching))
+            self.log.info("_similarPlayers :: NO MATCHES for {0} :: {1}".format(optname, matching))
         # return matching now.
         return matching
-
-    def _playerLookup(self, table, optname):
-        """Return the specific id in column (eid, rid) for player."""
-
-        optname = self._sanitizeName(optname)  # first sanitize.
-        with sqlite3.connect(self._playersdb) as db:  # everything within 'with' cuz we might need to access db.
-            cursor = db.cursor()  # first, check for an alias below.
-            query = "SELECT %s FROM players WHERE eid IN (SELECT id FROM aliases WHERE name LIKE ?)" % (table)
-            cursor.execute(query, ('%'+optname+'%',))  # wrap the alias in %.
-            aliasrow = cursor.fetchone()
-            if not aliasrow:  # if no alias.
-                cursor = db.cursor()  # go into normal player db. %first%last% search.
-                query = "SELECT %s FROM players WHERE fullname LIKE ?" % (table)
-                cursor.execute(query, ('%'+optname.replace(' ', '%')+'%',))  # wrap in % and replace space with wc.
-                row = cursor.fetchone()
-                if not row:  # we did not find a %name%match% nor alias. check dm for mispellings.
-                    namesplit = optname.split()  ############### clean-up function here. #####################
-                    if len(namesplit) > 1:  # we have more than one, first and last. assume 0 is first, 1 is last.
-                        fndm = doublemetaphone(namesplit[0])  # get our list of first-name dm.
-                        lndm = doublemetaphone(namesplit[1])  # get our list of last-name dm.
-                        if lndm[1] != '':  # if we have a secondary dm code.
-                            query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
-                        else:  # check only primary lastname dm.
-                            query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
-                        if fndm[1] != '': # likewise with first name.
-                            query += " AND fndm1='%s' AND fndm2='%s'" % (fndm[0], fndm[1])
-                        else:  # only check first name primary dm.
-                            query += " AND fndm1='%s'" % (fndm[0])
-                    else:  # assume one name given and that we check only on the last.
-                        lndm = doublemetaphone(namesplit[0])
-                        if lndm[1] != '':  # secondary dm code.
-                            query = "SELECT %s FROM players WHERE lndm1='%s' AND lndm2='%s'" % (table, lndm[0], lndm[1])
-                        else:  # primary dm check only.
-                            query = "SELECT %s FROM players WHERE lndm1='%s'" % (table, lndm[0])
-                    # now that we have DM query, execute.
-                    cursor.execute(query)  # query constructed above.
-                    row = cursor.fetchone()
-                    if not row:  # dm failed. last chance to try using fuzzy string matching.
-                        names = self._similarPlayers(optname)  # get a list of dicts back based on optname.
-                        for sname in names:  # iterate through what we give back. might be different # of elements.
-                            if 'jaro' in sname:  # don't know if we'll have jaro or damerau
-                                if sname['jaro'] > 0.7:  # over the 0.7 threshold is usually good.
-                                    optid = str(sname[table])  # grab the id we're looking for.
-                                    break  # stop iteration.
-                            if 'damerau' in sname:  # now if we have damerau. we're here if its a damerau match instead of jaro.
-                                if sname['damerau'] < 7:  # less than seven on it.
-                                    optid = str(sname[table])  # grab the id we're looking for.
-                                    break  # break.
-                        else:  # if we're here, we did NOT find any good jaro/damerau matches and out of the for loop.
-                            optid = names  # we return a list of names. this is used to display "similar players"
-                    else: # dm worked so we return the id matched by dm.
-                        optid = str(row[0])
-                else:  # fullname query worked so return the id matched by fullname.
-                    optid = str(row[0])
-            else:  # matched input via alias so we return that.
-                optid = str(aliasrow[0])
-        # close db and return the id.
-        return optid
-
-    #######################################
-    # ALIAS AND PLAYER DB PUBLIC FUNCTION #
-    #######################################
-
-    def nfldb(self, irc, msg, args):
-        """
-        Return stats about the NFL teams and players databases.
-        """
-
-        # playerdb query.
-        with sqlite3.connect(self._playersdb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT Count() FROM players")
-            numofplayers = cursor.fetchone()[0]
-            cursor.execute("SELECT Count() FROM aliases")
-            numofaliases = cursor.fetchone()[0]
-        # teamdb query.
-        with sqlite3.connect(self._nfldb) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT Count() FROM nfl")
-            numofteams = cursor.fetchone()[0]
-            cursor.execute("SELECT Count() FROM nflteamaliases")
-            numofteamaliases = cursor.fetchone()[0]
-        # print.
-        irc.reply("NFLDB: I know about {0} NFL players, {1} player aliases, {2} teams and {3} team aliases.".format(\
-            numofplayers, numofaliases, numofteams, numofteamaliases))
-
-    nfldb = wrap(nfldb)
     
     ################################
     # INTERNET PLAYER DB FUNCTIONS #
@@ -444,6 +374,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -2676,7 +2611,8 @@ class NFL(callbacks.Plugin):
         """
 
         # base = september first of this year.
-        now, base = datetime.datetime.today(), datetime.datetime(now.year, 9, 1)
+        now = datetime.datetime.today()
+        base = datetime.datetime(now.year, 9, 1)
         # so we now take the 'weekday' of September 1st. If it's before Thursday, we add enough days forward
         # to hit Thursday. If it's after Thursday, we add enough days to get to the next Thursday.
         wd = base.weekday()
