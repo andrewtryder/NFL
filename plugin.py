@@ -420,6 +420,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -466,6 +471,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -539,6 +549,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -573,6 +588,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -618,6 +638,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -698,6 +723,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -841,6 +871,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -953,6 +988,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
@@ -1056,6 +1096,11 @@ class NFL(callbacks.Plugin):
         # did we find the player or get anything back?
         if not pf:
             irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
             return
         # we did get it. lets go http fetch the page.
         html = self._httpget(pf)
