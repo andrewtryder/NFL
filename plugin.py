@@ -576,6 +576,76 @@ class NFL(callbacks.Plugin):
         irc.reply("{0} :: {1}".format(self._red(h1), contract))
 
     nflrotocontract = wrap(nflrotocontract, [('text')])
+    
+    def nflplayercareer(self, irc, msg, args, optplayer):
+        """<player>
+        
+        Display a player's career time and teams played for.
+        """
+        
+        pf = self._pf("e", optplayer)
+        # did we find the player or get anything back?
+        if not pf:
+            irc.reply("ERROR: Sorry, I was unable to find any player matching '{0}'. Spell the player's name correctly?".format(optplayer))
+            # lets try to help them out with similar names.
+            sp = self._similarPlayers(optplayer)
+            if sp:  # if we get something back, lets return the fullnames.
+                irc.reply("Possible suggestions: {0}".format(" | ".join([i['fullname'].title() for i in sp])))
+            # now exit regardless.
+            return
+        # we did get. change url (string pf)
+        pf = pf.replace('/nfl/player/_/id/', '/nfl/player/stats/_/id/')
+        # we did get it. lets go http fetch the page.
+        html = self._httpget(pf)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
+        # process html.
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        dclass = soup.find('div', attrs={'class':'mod-container mod-table mod-player-stats'})
+        # if not dclass
+        # find first table.
+        firstt = dclass.find('table', attrs={'class':'tablehead'})
+        # find rows.
+        rows = firstt.findAll('tr', attrs={'class':re.compile('oddrow|evenrow')})
+        # sanity check.
+        if len(rows) == 0:
+            irc.reply("ERROR: I did not find any player stats for: {0}".format(optplayer))
+            return
+        career = collections.defaultdict(list)  # store in dict.
+        yr = []
+        # now lets grab the year + team.
+        for row in rows:
+            tds = row.findAll('td')
+            # first td is year.
+            y = tds[0].getText()
+            t = tds[1].getText()
+            career[t].append(int(y))
+            yr.append({'y':int(y), 't':t})  # store y as int. t=unicode.
+        # years played stats.
+        yp = "Years played({0}) from: {1}-{2}".format(yr[-1]['y']-yr[0]['y'], yr[0]['y'], yr[-1]['y'])
+        # teams played stats.
+        t = collections.Counter()  # counter.
+        for i in yr:  # build the counter.
+            if i['t']:  # only count teams.
+                t[i['t']] += 1
+        # format output for tp.
+        tp = []
+        # lets iterate through t, our Counter.
+        for (k, v) in t.items():
+            # k = team, v = # of times appears.
+            tp.append("{0}({1}): {2}".format(k, v, ", ".join([str(f) for f in career[k]])))
+        # make the string.
+        tp = "Teams({0}): {1}".format(len(tp) ,"  ".join([i for i in tp]))
+        # we should be good if we're here. quick playername grab.
+        pname = soup.find('div', attrs={'class':'mod-content'}).find('h1').getText().encode('utf-8')
+        # now append for output.
+        outstr = "{0} :: {1} :: {2}".format(self._red(pname), yp, tp)
+        # output to irc.
+        irc.reply("{0}".format(outstr))
+
+    nflplayercareer = wrap(nflplayercareer, [('text')])
 
     def nflinfo(self, irc, msg, args, optplayer):
         """<player>
