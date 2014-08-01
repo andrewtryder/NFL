@@ -2796,44 +2796,17 @@ class NFL(callbacks.Plugin):
             return
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        lastDate = soup.findAll('span', attrs={'class': 'time'})[0]
-        divs = soup.findAll('div', attrs={'class': 'entry'})
-        # list container for output.
-        arrestlist = []
-        # each div is an arrest.
-        for div in divs:
-            title = div.find('h2').getText().encode('utf-8')
-            datet = div.find('span', attrs={'class': 'time'}).getText().encode('utf-8')
-            datet = self._dtFormat("%m/%d", datet, "%B %d, %Y")  # translate date.
-            arrestedfor = div.find('strong', text=re.compile('Team:'))
-            if arrestedfor:  # if we found strong, regex to parse it out.
-                matches = re.search(r'<strong>Team:.*?</strong>(.*?)<br />', arrestedfor.findParent('p').renderContents(), re.I| re.S| re.M)
-                if matches:  # we found what we needed.
-                    college = matches.group(1).replace('(NFL)','').encode('utf-8').strip()
-                else:  # make it easy with "No Team"
-                    college = "No team"
-            else:  # same. Make it easy with "No Team".
-                college = "No team"
-            charge = div.find('strong', text=re.compile('Charge:|Charges:'))  # find if we have charges.
-            if charge:  # if we found strong, regex to parse it out.
-                charges = re.search(r'<strong>Charge.*?</strong>(.*?)<br />', charge.findParent('p').renderContents(), re.I| re.S| re.M)
-                if charges:  # we found what we needed.
-                    charge = charges.group(1) # .encode('utf-8').strip()
-                else:  # something went wrong so don't add.
-                    charge = None
-            else:  # didn't find so something probably broke.
-                charge = None
-            if charge:  # if we find a charge, add it.
-                arrestlist.append("{0} :: {1} - {2} - {3}".format(datet, title, college, charge))
-            else:  # if not, don't add a charge.
-                arrestlist.append("{0} :: {1} - {2}".format(datet, title, college))
-        # now prepare to output.
-        # date math. cacls days between last arrest and today.
-        delta = datetime.datetime.strptime(str(lastDate.getText()), "%B %d, %Y").date() - datetime.date.today()
-        daysSince = abs(delta.days)
-        irc.reply("{0} days since last NFL arrest".format(self._red(daysSince)))
-        for each in arrestlist[0:6]:  # print the last 6.
-            irc.reply(each)
+        ars = soup.findAll('h2', attrs={'class':'blog-title'})
+        if len(ars) == 0:
+            irc.reply("No arrests found. Something break?")
+            return
+        else:
+            for ar in ars[0:5]:  # iterate over each.
+                ard = ar.findNext('div', attrs={'class':'blog-date'})
+                # text and cleanup.
+                ard = ard.getText().replace('Posted On', '')
+                # print.
+                irc.reply("{0} - {1}".format(ar.getText(), ard))
 
     nflarrests = wrap(nflarrests)
 
