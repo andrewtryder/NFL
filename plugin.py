@@ -2543,36 +2543,6 @@ class NFL(callbacks.Plugin):
 
     nflinjury = wrap(nflinjury, [getopts({'details':''}), ('somethingWithoutSpaces')])
 
-    def nflvaluations(self, irc, msg, args):
-        """
-        Display current NFL team valuations from Forbes.
-        """
-
-        url = self._b64decode('aHR0cDovL3d3dy5mb3JiZXMuY29tL25mbC12YWx1YXRpb25zL2xpc3Qv')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        tbody = soup.find('tbody', attrs={'id':'listbody'})
-        rows = tbody.findAll('tr')
-
-        append_list = []
-
-        for row in rows:
-            tds = row.findAll('td')
-            rank = tds[0].getText()
-            team = tds[1].getText()
-            value = tds[2].getText().replace(',','')  # value needs some mixing and to a float.
-            append_list.append("{0}. {1} ({2})".format(rank, self._bold(team), self._millify(float(value)*(1000000))))
-
-        header = self._red("Current NFL Team Values")
-        irc.reply("{0} :: {1}".format(header, " | ".join(append_list)))
-
-    nflvaluations = wrap(nflvaluations)
-
     def nflpowerrankings(self, irc, msg, args, optteam):
         """[team]
         Display this week's NFL Power Rankings.
