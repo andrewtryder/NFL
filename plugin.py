@@ -2609,17 +2609,12 @@ class NFL(callbacks.Plugin):
 
     nflpowerrankings = wrap(nflpowerrankings, [optional('somethingWithoutSpaces')])
 
-    def nflschedule(self, irc, msg, args, optlist, optteam):
-        """[--full] <team>
+    def nflschedule(self, irc, msg, args, optteam):
+        """<team>
         Display the last and next five upcoming games for team.
-        Use --full to display the entire 16 game schedule.
+
         Ex: NE
         """
-
-        fullSchedule = False
-        for (option, arg) in optlist:
-            if option == 'full':
-                fullSchedule = True
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -2628,67 +2623,33 @@ class NFL(callbacks.Plugin):
             return
 
         lookupteam = self._translateTeam('eid', 'team', optteam) # don't need a check for 0 here because we validate prior.
+        url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsLw==') + 'teamschedule?teamId=%s&wjb=' % str(lookupteam)
+        html = self._httpget(url)
+        if not html:
+            irc.reply("ERROR: Failed to fetch {0}.".format(url))
+            self.log.error("ERROR opening {0}".format(url))
+            return
 
-        if fullSchedule: # diff url/method.
-            lookupteam = self._translateTeam('eid', 'team', optteam) # don't need a check for 0 here because we validate prior.
-            url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsLw==') + 'teamschedule?teamId=%s&wjb=' % str(lookupteam)
-            html = self._httpget(url)
-            if not html:
-                irc.reply("ERROR: Failed to fetch {0}.".format(url))
-                self.log.error("ERROR opening {0}".format(url))
-                return
+        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
+        table = soup.find('table', attrs={'class':'table'})
+        # make sure we have table
+        rows = table.findAll('tr')
+        # container for output
+        schedule = []
+        # process these rows.
+        for row in rows[1:]:
+            tds = row.findAll('td')
+            if tds[0]['class'].startswith('ind') and len(tds) == 3:
+                gamedate = tds[0].getText()
+                opp = tds[1].getText()
+                result = tds[2].getText()
+                schedule.append("{0} - {1} - {2}".format(gamedate, opp, result))
+        # prep for output.
+        descstring = " | ".join([item for item in schedule])
+        output = "{0} SCHED :: {1}".format(ircutils.mircColor(optteam, 'red'), descstring)
+        irc.reply(output)
 
-            soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-            table = soup.find('table', attrs={'class':'table'})
-            # make sure we have table
-            rows = table.findAll('tr')
-            # container for output
-            schedule = []
-            # process these rows.
-            for row in rows[1:]:
-                tds = row.findAll('td')
-                if tds[0]['class'].startswith('ind') and len(tds) == 3:
-                    gamedate = tds[0].getText()
-                    opp = tds[1].getText()
-                    result = tds[2].getText()
-                    schedule.append("{0} - {1} - {2}".format(gamedate, opp, result))
-            # prep for output.
-            descstring = " | ".join([item for item in schedule])
-            output = "{0} SCHED :: {1}".format(ircutils.mircColor(optteam, 'red'), descstring)
-            irc.reply(output)
-        else:  # short schedule.
-            lookupteam = self._translateTeam('yahoo', 'team', optteam) # don't need a check for 0 here because we validate prior.
-            url = self._b64decode('aHR0cDovL3Nwb3J0cy55YWhvby5jb20vbmZsL3RlYW1z') + '/%s/calendar/rss.xml' % lookupteam
-            html = self._httpget(url)
-            if not html:
-                irc.reply("ERROR: Failed to fetch {0}.".format(url))
-                self.log.error("ERROR opening {0}".format(url))
-                return
-
-            # clean this stuff up
-            html = html.replace('<![CDATA[','').replace(']]>','').replace('EDT','').replace('\xc2\xa0',' ')
-
-            soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-            items = soup.find('channel').findAll('item')
-
-            append_list = []
-
-            for item in items:
-                title = item.find('title').renderContents().strip() # title is good.
-                day, date = title.split(',')
-                desc = item.find('description') # everything in desc but its messy.
-                desctext = desc.findAll(text=True) # get all text, first, but its in a list.
-                descappend = (''.join(desctext).strip()) # list transform into a string.
-                if not descappend.startswith('@'): # if something is @, it's before, but vs. otherwise.
-                    descappend = 'vs. ' + descappend
-                descappend += " [" + date.strip() + "]"
-                append_list.append(descappend) # put all into a list.
-
-            descstring = " | ".join([item for item in append_list])
-            output = "{0} {1}".format(self._bold(optteam), descstring)
-            irc.reply(output)
-
-    nflschedule = wrap(nflschedule, [(getopts({'full':''})), ('somethingWithoutSpaces')])
+    nflschedule = wrap(nflschedule, [('somethingWithoutSpaces')])
 
     def nflcountdown(self, irc, msg, args):
         """
