@@ -172,7 +172,7 @@ class NFL(callbacks.Plugin):
         format a size in bytes into a 'human' size.
         """
 
-        try:  # to be safe, wrap in a giant try/except block.    
+        try:  # to be safe, wrap in a giant try/except block.
             s = s.replace(',', '').replace('$', '').strip()  # remove $ and ,
             # are we negative?
             if s.startswith('-'):
@@ -1853,7 +1853,7 @@ class NFL(callbacks.Plugin):
             player = row.find('td', attrs={'class':re.compile('player .*?')}).find('a')
             # position = player.findNext('span', attrs={'class':'position'})
             salary = row.find('span', attrs={'class':'playersalary'}).getText().replace('$','').replace(',','')
-            append_list.append("{0}. {1} {2}".format(rank.getText().strip(), self._bold(player.getText().strip()), self._millify(float(salary))))
+            append_list.append("{0}. {1} {2}".format(rank.getText().strip(), self._bold(player.getText().strip()), self._hs(salary)))
 
         # make title
         title = self._red('NFL Top Salaries')
