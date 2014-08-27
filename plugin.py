@@ -2807,9 +2807,9 @@ class NFL(callbacks.Plugin):
             for ar in ars[0:5]:  # iterate over each.
                 ard = ar.findNext('div', attrs={'class':'blog-date'})
                 # text and cleanup.
-                ard = ard.getText().replace('Posted On', '')
+                ard = ard.getText().encode('utf-8').replace('Posted On', '')
                 # print.
-                az.append({'d':ard, 'a':ar.getText()})
+                az.append({'d':ard, 'a':ar.getText().encode('utf-8')})
         # now lets create our output.
         delta = datetime.datetime.strptime(str(az[0]['d']), "%B %d, %Y").date() - datetime.date.today()
         daysSince = abs(delta.days)
