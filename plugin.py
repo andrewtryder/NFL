@@ -1829,7 +1829,7 @@ class NFL(callbacks.Plugin):
             url += 'cap-hit/'
         if optposition:
             if optposition not in positions:
-                irc.reply("ERROR: Position not found. Must be one of: %s" % positions)
+                irc.reply("ERROR: Position not found. Must be one of: %s" % ", ".join([i for i in positions]))
                 return
             else:
                 url += '%s/' % optposition
