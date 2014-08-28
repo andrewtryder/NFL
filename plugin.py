@@ -370,6 +370,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         pf = self._pf("s", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -416,6 +423,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+                
         pf = self._pf("s", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -466,7 +480,14 @@ class NFL(callbacks.Plugin):
         Display contract information for player, if found, via SpotTrac.
         Ex: Tom Brady
         """
-        
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         pf = self._pf("s", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -545,6 +566,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         pf = self._pf("r", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -582,6 +610,13 @@ class NFL(callbacks.Plugin):
         
         Display a player's career time and teams played for.
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
         
         pf = self._pf("e", optplayer)
         # did we find the player or get anything back?
@@ -654,6 +689,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         pf = self._pf("e", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -703,6 +745,13 @@ class NFL(callbacks.Plugin):
         Display latest news for NFL player.
         Ex: Tom Brady
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         pf = self._pf("r", optplayer)
         # did we find the player or get anything back?
@@ -768,6 +817,13 @@ class NFL(callbacks.Plugin):
         If --year #### is not specified, it defaults to the current NFL year.
         Ex: Tom Brady OR --game 2 Eli Manning OR --year 2012 --game 2 Eli Manning
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # define variables.
         optgame, optyear = False, None
@@ -917,6 +973,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady or --year 2010 Tom Brady
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # handle optinput for season.
         season = False
         if optlist:
@@ -1053,6 +1116,13 @@ class NFL(callbacks.Plugin):
         Ex: Tom Brady
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # now we need to find the player.
         pf = self._pf("e", optplayer)
         # did we find the player or get anything back?
@@ -1161,6 +1231,13 @@ class NFL(callbacks.Plugin):
         Ex: Eli Manning
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # now we need to find the player.
         pf = self._pf("e", optplayer)
         # did we find the player or get anything back?
@@ -1247,6 +1324,13 @@ class NFL(callbacks.Plugin):
         Ex: nflteams or nflteams AFC or nflteams AFC East.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # first, check and lower our inputs if we have them.
         if optconf:
             optconf = optconf.lower()
@@ -1289,6 +1373,13 @@ class NFL(callbacks.Plugin):
         Display NFL Hall Of Fame inductees for year 1963 and on. Defaults to the latest year.
         Ex: 2010
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         if optyear:  # check for year or use the "last".
             testdate = self._validate(optyear, '%Y')
@@ -1333,6 +1424,13 @@ class NFL(callbacks.Plugin):
         Display a team's schedule with win/loss from season.
         Ex: NE 2005 or GB 2010
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -1403,6 +1501,13 @@ class NFL(callbacks.Plugin):
         Ex: 2003
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         testdate = self._validate(optyear, '%Y')
         if not testdate or int(optyear) < 1966:  # superbowl era and on.
             irc.reply("ERROR: Invalid year. Must be YYYY and after 1966.")
@@ -1441,6 +1546,13 @@ class NFL(callbacks.Plugin):
         Display information from a specific Super Bowl.
         Ex: 39 or XXXIX or 2004.
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         if optbowl.isdigit():  # if fed digits, check if it's between 1966 and cur year..
             if not 1966 <= int(optbowl) <= datetime.datetime.now().year: # < 1966 is really what we need here.
@@ -1483,6 +1595,13 @@ class NFL(callbacks.Plugin):
         Show all-time head-to-head records for regular season and playoffs of teams.
         Ex: NE NYJ
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -1541,6 +1660,13 @@ class NFL(callbacks.Plugin):
         Ex: NE.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -1588,6 +1714,13 @@ class NFL(callbacks.Plugin):
         Display a team's draft picks from a specific year.
         Ex: NE 2010
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -1644,6 +1777,13 @@ class NFL(callbacks.Plugin):
         Ex: NE
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -1687,6 +1827,13 @@ class NFL(callbacks.Plugin):
         Display latest NFL transactions.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # build and fetch url.
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC90cmFuc2FjdGlvbnM=')
         html = self._httpget(url)
@@ -1722,6 +1869,13 @@ class NFL(callbacks.Plugin):
         Display NFL Pro Bowlers for a year.
         Ex: 2011.
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # must test the date.
         testdate = self._validate(optyear, '%Y')
@@ -1770,6 +1924,13 @@ class NFL(callbacks.Plugin):
         Display weekly NFL Leaders in various categories.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # build and fetch url.
         url = self._b64decode('aHR0cDovL20uZXNwbi5nby5jb20vbmZsL2xlYWRlcnM/d2pi')
         html = self._httpget(url)
@@ -1808,6 +1969,13 @@ class NFL(callbacks.Plugin):
         Use --caphit to display highest cap-hit.
         Other option is: position. Use the command with an argument to display valid positions.
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         average, caphit = False, False
         for (option, arg) in optlist:
@@ -1875,6 +2043,13 @@ class NFL(callbacks.Plugin):
         Use --postseason to show post-season stats.
         Ex: Passing td or Punting punts 2003. Stats show regular season.
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         statsCategories = {
                 'Passing': {
@@ -2027,6 +2202,13 @@ class NFL(callbacks.Plugin):
         Ex: NE
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -2063,6 +2245,13 @@ class NFL(callbacks.Plugin):
         Display NFL standings for a division. Requires a conference and division.
         Use --detailed to display full table. Ex: AFC East
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # handle optlist.
         detailed = False
@@ -2149,6 +2338,13 @@ class NFL(callbacks.Plugin):
         Ex: GB
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -2198,6 +2394,13 @@ class NFL(callbacks.Plugin):
         Ex: NE
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -2238,6 +2441,13 @@ class NFL(callbacks.Plugin):
         Ex: nflroster NE QB (all QBs on NE) or NFL NE 12 (NE roster #12)
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -2252,8 +2462,7 @@ class NFL(callbacks.Plugin):
             optposition = optposition.upper()
 
         # build and fetch url
-        url = 'http://espn.go.com/nfl/team/roster/_/name/%s/' % lookupteam
-        # url = self._b64decode('') + '/%s' % lookupteam
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC90ZWFtL3Jvc3Rlci9fL25hbWUv') + '/%s' % lookupteam
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
@@ -2296,6 +2505,13 @@ class NFL(callbacks.Plugin):
         Display total NFL draft picks for a team and what round.
         Ex: NE
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -2345,6 +2561,13 @@ class NFL(callbacks.Plugin):
         Display current NFL Draft order for next year's draft.
         Will default to display the first round. Use --round # to display another (1-7)
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         optround = "1"  # by default, show round 1.
 
@@ -2403,6 +2626,13 @@ class NFL(callbacks.Plugin):
         Display the current NFL playoff match-ups if the season ended today.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9zdGFuZGluZ3MvXy90eXBlL3BsYXlvZmZzL3NvcnQvY29uZmVyZW5jZVJhbmsvb3JkZXIvZmFsc2U=')
         html = self._httpget(url)
         if not html:
@@ -2447,6 +2677,13 @@ class NFL(callbacks.Plugin):
         Ex: CHI
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -2482,6 +2719,13 @@ class NFL(callbacks.Plugin):
         Use --details to display full table with team injuries.
         Ex: NE or --details NYG
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # handle optlist input.
         details = False
@@ -2548,6 +2792,13 @@ class NFL(callbacks.Plugin):
         Display this week's NFL Power Rankings.
         Optional: use [team] to display specific commentary. Ex: ATL
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         if optteam:  # if we have a team, check if its valid.
             # test for valid teams.
@@ -2616,6 +2867,13 @@ class NFL(callbacks.Plugin):
         Ex: NE
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # test for valid teams.
         optteam = self._validteams(optteam)
         if not optteam: # team is not found in aliases or validteams.
@@ -2656,6 +2914,13 @@ class NFL(callbacks.Plugin):
         Display the time until the next NFL season starts.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # base = september first of this year.
         now = datetime.datetime.today()
         base = datetime.datetime(now.year, 9, 1)
@@ -2689,6 +2954,13 @@ class NFL(callbacks.Plugin):
         Defaults to round 1 if round is not given.
         Ex: nfldraft 2000 6 (Would show the 6th round of the 2000 draft)
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # defaults to latest year/1st round. input can change this otherwise.
         if optyear:  # test year.
@@ -2748,6 +3020,13 @@ class NFL(callbacks.Plugin):
         Display the last NFL 5 trades.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwtdHJhZGUtdHJhY2tlci8=')
         html = self._httpget(url)
         if not html:
@@ -2788,6 +3067,13 @@ class NFL(callbacks.Plugin):
         Display the last 6 NFL Arrests from NFL Nation.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # build and fetch url.
         url = self._b64decode('aHR0cDovL2FycmVzdG5hdGlvbi5jb20vY2F0ZWdvcnkvcHJvLWZvb3RiYWxsLw==')
         html = self._httpget(url)
@@ -2823,6 +3109,13 @@ class NFL(callbacks.Plugin):
         Display the top10 NFL QBs, ranked by Total QBR.
         Use --postseason to display for postseason.
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         postseason = False
         for (option, arg) in optlist:
@@ -2863,6 +3156,13 @@ class NFL(callbacks.Plugin):
         Display the coach for team.
         Ex: NYJ
         """
+
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -2906,6 +3206,13 @@ class NFL(callbacks.Plugin):
         Display the latest headlines from nfl.com.
         """
 
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
+
         # build and fetch url.
         url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsX25ld3NMaXN0Lmpz')
         html = self._httpget(url)
@@ -2937,7 +3244,12 @@ class NFL(callbacks.Plugin):
         Use exact or near exact team name.
         Ex: Patriots OR Rams OR Falcons
         """
-
+        # enforce +voice or above to use command?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
+            if ircutils.isChannel(msg.args[0]): # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
+                    return
         url = self._b64decode('aHR0cDovL3Njb3Jlcy5lc3BuLmdvLmNvbS9uZmwvc2NvcmVib2FyZA==')
         # build and fetch url.
         html = self._httpget(url)
