@@ -3201,42 +3201,6 @@ class NFL(callbacks.Plugin):
 
     nflcoach = wrap(nflcoach, [('somethingWithoutSpaces')])
 
-    def nflnews(self, irc, msg, args):
-        """
-        Display the latest headlines from nfl.com.
-        """
-
-        # enforce +voice or above to use command?
-        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
-            if ircutils.isChannel(msg.args[0]): # are we in a channel?
-                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
-                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
-                    return
-
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL3MzLmFtYXpvbmF3cy5jb20vbmZsZ2MvYWxsX25ld3NMaXN0Lmpz')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # try and process json.
-        try:
-            jsondata = json.loads(html)['content']
-        except:
-            irc.reply("ERROR: Failed to parse article json from: {0}".format(url))
-            return
-        # iterate through and output.
-        for article in jsondata[0:6]:
-            title = article.get('title')
-            # desc = article.get('description')
-            link = article.get('linkURL')
-            # date = article.get('date_ago')
-            if title and link:
-                irc.reply("{0} - {1}".format(self._bold(title), self._shortenUrl(link)))
-
-    nflnews = wrap(nflnews)
-
     def nflgamestats(self, irc, msg, args, optteam):
         """<team>
 
