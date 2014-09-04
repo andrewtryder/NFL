@@ -1757,7 +1757,7 @@ class NFL(callbacks.Plugin):
             # translate the team here.
             pick_team = self._translateTeam('team', 'dh', tds[4].lower())
             # prep appendString.
-            appendString = "{0}. {1} ({2} {3})".format(tds[2], tds[3], tds[5], tds[6])
+            appendString = "{0}. {1} ({2} {3})".format(tds[2], tds[3], tds[5], tds[6].replace('&amp;', '&'))
             # add each pick key: team value: string
             teamdict.setdefault(pick_team, []).append(appendString)
         # output time.
