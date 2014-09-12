@@ -2462,7 +2462,8 @@ class NFL(callbacks.Plugin):
             optposition = optposition.upper()
 
         # build and fetch url
-        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC90ZWFtL3Jvc3Rlci9fL25hbWUv') + '/%s' % lookupteam
+        #
+        url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC90ZWFtL3Jvc3Rlci9fL25hbWUv') + '%s' % lookupteam
         html = self._httpget(url)
         if not html:
             irc.reply("ERROR: Failed to fetch {0}.".format(url))
