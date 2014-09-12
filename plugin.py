@@ -803,6 +803,9 @@ class NFL(callbacks.Plugin):
             if news: playerNews += " {0}".format(news.encode('utf-8').replace('&quot;', '"'))
             if impact: playerNews += " {0}".format(impact.encode('utf-8').replace('&quot;', '"'))  #self._remove_accents(impact))
 
+        # remove html tags before.
+        TAG_RE = re.compile(r'<[^>]+>')
+        playerNews = TAG_RE.sub('', playerNews)
         # finally, lets output. this works with both methods above.
         output = "{0} :: {1}".format(self._bold(playerName), utils.str.normalizeWhitespace(playerNews))
         irc.reply(output)
