@@ -528,14 +528,14 @@ class NFL(callbacks.Plugin):
             else:  # rest of them.
                 saltit = self._bold(l.getText().replace(':', ''))
                 salfig = self._hs(e.getText())
-                si.append("{0}: {1}".format(saltit, salfig))
+                si.append("{0}: {1}".format(saltit.encode('utf-8'), salfig.encode('utf-8')))
         # next, the details on contracts, if present.
         condetails = table.find('div', attrs={'class':'player-details'})
         if condetails:  # clean this up a bit because there are too many spaces.
             condetails = utils.str.normalizeWhitespace(condetails.getText(separator=' ').strip())
-            irc.reply("{0} :: {1} :: {2}".format(self._bu(pname), " | ".join(si), condetails))
+            irc.reply("{0} :: {1} :: {2}".format(self._bu(pname.encode('utf-8')), " | ".join(si), condetails.encode('utf-8')))
         else:  # just the basics on the contract details from above. something went wrong with condetails.
-            irc.reply("{0} :: {1}".format(self._bu(pname), " | ".join(si)))
+            irc.reply("{0} :: {1}".format(self._bu(pname.encode('utf-8')), " | ".join(si)))
         # last entry now.
         # now lets find the 'current salary' years
         cursal = table.find('table', attrs={'class':'salaryTable current'})
@@ -555,7 +555,7 @@ class NFL(callbacks.Plugin):
                         tdtxt = self._hs(tdtxt)  # try and format..
                         cursalout.append("{0}: {1}".format(cursalhead[i].getText(), tdtxt))
         # lets output what we have so far.
-        irc.reply("{0} :: {1}".format(self._bu(pname), " | ".join(cursalout)))
+        irc.reply("{0} :: {1}".format(self._bu(pname.encode('utf-8')), " | ".join(cursalout)))
 
     nflspotcontract = wrap(nflspotcontract, [('text')])
 
