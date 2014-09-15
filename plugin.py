@@ -2864,11 +2864,13 @@ class NFL(callbacks.Plugin):
 
     nflpowerrankings = wrap(nflpowerrankings, [optional('somethingWithoutSpaces')])
 
-    def nflschedule(self, irc, msg, args, optteam):
-        """<team>
-        Display the last and next five upcoming games for team.
+    def nflschedule(self, irc, msg, args, optlist, optteam):
+        """[--pre] <team>
+        
+        Display team's schedule for season.
+        Use --pre to display preseason.
 
-        Ex: NE
+        Ex: NE or --pre NE
         """
 
         # enforce +voice or above to use command?
@@ -2877,6 +2879,12 @@ class NFL(callbacks.Plugin):
                 if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
                     irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
                     return
+
+        # handle optlist input.
+        pre = False
+        for (option, arg) in optlist:
+            if option == 'pre':
+                pre = True
 
         # test for valid teams.
         optteam = self._validteams(optteam)
@@ -2902,6 +2910,13 @@ class NFL(callbacks.Plugin):
         for row in rows[1:]:
             tds = row.findAll('td')
             if tds[0]['class'].startswith('ind') and len(tds) == 3:
+                sea = row.findPrevious('td', attrs={'class':'ind sub bold', 'colspan':'4'}).getText()  # season.
+                if pre:  # display only preseason.
+                    if sea != "PRESEASON":  # should we include preseason?
+                        continue
+                else:  # do not display preseason.
+                    if sea == "PRESEASON":
+                        continue
                 gamedate = tds[0].getText()
                 opp = tds[1].getText()
                 result = tds[2].getText()
@@ -2911,7 +2926,7 @@ class NFL(callbacks.Plugin):
         output = "{0} SCHED :: {1}".format(ircutils.mircColor(optteam, 'red'), descstring)
         irc.reply(output)
 
-    nflschedule = wrap(nflschedule, [('somethingWithoutSpaces')])
+    nflschedule = wrap(nflschedule, [getopts({'pre':''}), ('somethingWithoutSpaces')])
 
     def nflcountdown(self, irc, msg, args):
         """
