@@ -34,6 +34,7 @@ class NFL(callbacks.Plugin):
         self.__parent = super(NFL, self)
         self.__parent.__init__(irc)
         self._nfldb = os.path.abspath(os.path.dirname(__file__)) + '/db/nfl.db'
+        self._nflplayeraliasdb = os.path.abspath(os.path.dirname(__file__)) + '/db/nflplayeralias.db'
 
     def die(self):
         self.__parent.die()
@@ -315,7 +316,29 @@ class NFL(callbacks.Plugin):
             self.log.info("_similarPlayers :: NO MATCHES for {0} :: {1}".format(optname, matching))
         # return matching now.
         return matching
+
+    ######################################
+    # INTERNAL PLAYER ALIAS DB FUNCTIONS #
+    ######################################
+
+    def _findPlayerAlias(self, optalias):
+        """<name>
+        
+        Checks if there is a player alias.
+        Returns full name if one. None if none there.
+        """
     
+        with sqlite3.connect(self._nflplayeraliasdb) as conn:
+            cursor = conn.cursor()
+            query = "SELECT name FROM nflplayeralias WHERE alias='%s'" % (optalias)
+            cursor.execute(query) 
+            row = cursor.fetchone()
+        # figure out what to return.
+        if row:  # we found an alias. return the full name.
+            return (str(row[0]))
+        else:  # no alias, so just return the original string.
+            return optalias
+            
     ################################
     # INTERNET PLAYER DB FUNCTIONS #
     ################################
@@ -325,12 +348,10 @@ class NFL(callbacks.Plugin):
         
         Find a player's page via google ajax. Specify DB based on site.
         """
+        
+        # first, check if this is an alias.
+        pname = self._findPlayerAlias(pname)
 
-        # first, figure out the site based on db string.
-        # quote_plus(search_term)
-        # urllib.urlencode({'q':searchfor})
-        # try urlencode pname.
-        #pname = utils.web.urlencode(pname)
         # db.
         if db == "e":  # espn.
             burl = "%s site:espn.go.com/nfl/player/" % pname
