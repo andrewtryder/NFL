@@ -47,4 +47,7 @@ INSERT INTO nflplayeralias (alias, name) VALUES ('scam', 'cam newton');
 INSERT INTO nflplayeralias (alias, name) VALUES ('superman', 'cam newton');
 INSERT INTO nflplayeralias (alias, name) VALUES ('laptop', 'cam newton');
 INSERT INTO nflplayeralias (alias, name) VALUES ('tom terrific', 'tom brady');
+INSERT INTO nflplayeralias (alias, name) VALUES ('aarod', 'aaron rodgers');
+INSERT INTO nflplayeralias (alias, name) VALUES ('doublecheck', 'aaron rodgers');
+INSERT INTO nflplayeralias (alias, name) VALUES ('discount doublechoke', 'aaron rodgers');
 
