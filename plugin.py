@@ -2389,7 +2389,7 @@ class NFL(callbacks.Plugin):
         # blank list for container
         capfigs = []
         # ugh, this keeps changing. find the two bottom tds that matter.
-        headerrow = soup.find('th', text={'Cap Totals'}).findParent('tr')
+        headerrow = soup.find('th', text=re.compile('Totals')).findParent('tr')
         firsttd = soup.find('td', attrs={'class':'total bottom figure'}).findParent('tr')
         secondtd = soup.find('td', text={'Cap Space'}).findParent('tr')
         #self.log.info("{0}".format(secondtd))
