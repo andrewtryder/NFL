@@ -264,9 +264,10 @@ class NFL(callbacks.Plugin):
         """ Sanitize name. """
 
         name = name.lower()  # lower.
-        name = name.strip('.')  # remove periods.
-        name = name.strip('-')  # remove dashes.
-        name = name.strip("'")  # remove apostrophies.
+        name = name.replace('.', '')  # remove periods.
+        name = name.replace('-', '')  # remove dashes.
+        name = name.replace("'", '')  # remove apostrophies.
+	name = name.replace('"', '')
         # possibly strip jr/sr/III suffixes in here?
         return name
 
