@@ -348,7 +348,10 @@ class NFL(callbacks.Plugin):
         
         Find a player's page via google ajax. Specify DB based on site.
         """
-        
+	
+	# sanitize.
+	pname = self._sanitizeName(pname)        
+
         # first, check if this is an alias.
         pname = self._findPlayerAlias(pname)
 
