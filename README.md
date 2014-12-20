@@ -28,6 +28,15 @@ Next, load the plugin:
 /msg bot load NFL
 ```
 
+To use any player functions, you need a Bing API key.
+
+Sign up for Bing's Web Results only at:
+https://datamarket.azure.com/dataset/bing/searchweb
+
+Then use the key that is displayed here:
+
+https://datamarket.azure.com/account/keys
+
 You will now need a Bing API key to use any player functions. This can be set via the:
 
 ```
@@ -35,10 +44,11 @@ You will now need a Bing API key to use any player functions. This can be set vi
 
 ```
 
-Sign up for one (free) and input the "Primary Account Key" from here:
+Now reload the bot:
 
-https://datamarket.azure.com/account
-
+```
+/msg bot reload NFL
+```
 
 ## Example Usage
 
