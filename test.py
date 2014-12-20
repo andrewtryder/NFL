@@ -1,8 +1,5 @@
 ###
-# Copyright (c) 2012-2014, spline
-# All rights reserved.
-#
-#
+# see LICENSE.txt for information.
 ###
 
 from supybot.test import *

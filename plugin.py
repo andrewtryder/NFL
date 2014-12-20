@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 ###
-# Copyright (c) 2012-2014, spline
-# All rights reserved.
+# see LICENSE.txt for information.
 ###
+
 # my libs.
+import requests
+import urllib
 from BeautifulSoup import BeautifulSoup
 from base64 import b64decode
 import re
@@ -324,73 +326,74 @@ class NFL(callbacks.Plugin):
 
     def _findPlayerAlias(self, optalias):
         """<name>
-        
+
         Checks if there is a player alias.
         Returns full name if one. None if none there.
         """
-    
+
         with sqlite3.connect(self._nflplayeraliasdb) as conn:
             cursor = conn.cursor()
             query = "SELECT name FROM nflplayeralias WHERE alias='%s'" % (optalias)
-            cursor.execute(query) 
+            cursor.execute(query)
             row = cursor.fetchone()
         # figure out what to return.
         if row:  # we found an alias. return the full name.
             return (str(row[0]))
         else:  # no alias, so just return the original string.
             return optalias
-            
+
     ################################
     # INTERNET PLAYER DB FUNCTIONS #
     ################################
 
     def _pf(self, db, pname):
         """<e|r|s> <player>
-        
+
         Find a player's page via google ajax. Specify DB based on site.
         """
-	
-	# sanitize.
-	pname = self._sanitizeName(pname)        
+
+        # sanitize.
+        pname = self._sanitizeName(pname)
 
         # first, check if this is an alias.
         pname = self._findPlayerAlias(pname)
 
+        # need our api key.
+        bingapikey = self.registryValue('bingAPIkey')
+        if not bingapikey or bingapikey == '':
+            self.log.info("You need an API key for bing to be set. Set it and reload the plugin.")
+            return None
+
         # db.
         if db == "e":  # espn.
-            burl = "%s site:espn.go.com/nfl/player/" % pname
+            burl = "site:espn.go.com/nfl/player/ %s" % pname
         elif db == "r":  # rworld.
-            burl = "%s site:www.rotoworld.com/player/nfl/" % pname
+            burl = "site:www.rotoworld.com/player/nfl/ %s" % pname
         elif db == "s":  # st.
-            burl = "%s site:www.spotrac.com/nfl/" % pname
+            burl = "site:www.spotrac.com/nfl/ %s" % pname
+        # urlencode.
+        burl = urllib.quote_plus("'" + burl + "'")
+
         # construct url (properly escaped)
-        url = "http://ajax.googleapis.com/ajax/services/search/web?v=1.0&rsz=8&q=%s" % burl.replace(' ', '%20')
-        # now fetch url.
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
+        url = "https://api.datamarket.azure.com/Bing/SearchWeb/v1/Web?Query=%s&$top=20&$format=json" % (burl)
+        # fetch.
+        try:
+            r = requests.get(url, auth=(bingapikey, bingapikey))
+            rjson = r.json()
+            rjson = rjson['d']['results'][0]['Url']
+            return rjson
+        except Exception as e:
+            print "{0}".format(e)
             return None
-        # load the json.
-        jsonf = json.loads(html)
-        # make sure status is 200.
-        if jsonf['responseStatus'] != 200:
-            return None
-        # make sure we have results.
-        results = jsonf['responseData']['results']
-        if len(results) == 0:
-            return None
-        # finally, return the first url.
-        url = results[0]['url']
-        return url
+
 
     ################################################
     # NEW PLAYER DB FUNCTIONS WITH INTERNET SEARCH #
     ################################################
-    
+
     def nflplayertransactions(self, irc, msg, args, optplayer):
         """<player name>
-        
+
         Display any known transactions for player.
         Ex: Tom Brady.
         """
@@ -440,10 +443,10 @@ class NFL(callbacks.Plugin):
         irc.reply("{0}({1}) :: {2}".format(self._bu(pname), len(trans), " | ".join([utils.str.normalizeWhitespace(i.getText(separator=' ').encode('utf-8')) for i in trans])))
 
     nflplayertransactions = wrap(nflplayertransactions, [('text')])
-    
+
     def nflplayerfines(self, irc, msg, args, optplayer):
         """<player name>
-        
+
         Display any known fines for player, if found.
         Ex: Tom Brady
         """
@@ -454,7 +457,7 @@ class NFL(callbacks.Plugin):
                 if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
                     irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
                     return
-                
+
         pf = self._pf("s", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -496,12 +499,12 @@ class NFL(callbacks.Plugin):
                     fines.append("DATE: {0} REASON: {1} SUSP: {2} AMT: {3}".format(tds[4], tds[1], tds[2]))
             # now output.
             irc.reply("{0}({1}) :: {2}".format(self._bu(pname), len(fines), " | ".join(fines)))
-    
+
     nflplayerfines = wrap(nflplayerfines, [('text')])
-    
+
     def nflspotcontract(self, irc, msg, args, optplayer):
         """<player name>
-        
+
         Display contract information for player, if found, via SpotTrac.
         Ex: Tom Brady
         """
@@ -629,10 +632,10 @@ class NFL(callbacks.Plugin):
         irc.reply("{0} :: {1}".format(self._red(h1), contract))
 
     nflrotocontract = wrap(nflrotocontract, [('text')])
-    
+
     def nflplayercareer(self, irc, msg, args, optplayer):
         """<player>
-        
+
         Display a player's career time and teams played for.
         """
 
@@ -642,7 +645,7 @@ class NFL(callbacks.Plugin):
                 if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
                     irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
                     return
-        
+
         pf = self._pf("e", optplayer)
         # did we find the player or get anything back?
         if not pf:
@@ -1345,7 +1348,7 @@ class NFL(callbacks.Plugin):
 
     def nflteams(self, irc, msg, args, optconf, optdiv):
         """[conference] [division]
-        
+
         Display a list of NFL teams for input.
         Optional: use AFC or NFC for conference.
         It can also display specific divisions with North, South, East or West.
@@ -1397,7 +1400,7 @@ class NFL(callbacks.Plugin):
 
     def nflhof(self, irc, msg, args, optyear):
         """[year]
-        
+
         Display NFL Hall Of Fame inductees for year 1963 and on. Defaults to the latest year.
         Ex: 2010
         """
@@ -1448,7 +1451,7 @@ class NFL(callbacks.Plugin):
 
     def nflseasonsummary(self, irc, msg, args, optteam, optyear):
         """<TEAM> <YEAR>
-        
+
         Display a team's schedule with win/loss from season.
         Ex: NE 2005 or GB 2010
         """
@@ -1524,7 +1527,7 @@ class NFL(callbacks.Plugin):
 
     def nflawards(self, irc, msg, args, optyear):
         """<year>
-        
+
         Display NFL Awards for a specific year. Use a year from 1966 on to the current year.
         Ex: 2003
         """
@@ -2891,7 +2894,7 @@ class NFL(callbacks.Plugin):
 
     def nflschedule(self, irc, msg, args, optlist, optteam):
         """[--pre] <team>
-        
+
         Display team's schedule for season.
         Use --pre to display preseason.
 
@@ -2989,7 +2992,7 @@ class NFL(callbacks.Plugin):
             hl = kot-now
             irc.reply("There are {0} days, {1} hours, {2} mins, {3} seconds until the start of the {4} season".format(\
                             hl.days, hl.seconds/60/60, hl.seconds/60%60, hl.seconds%60, now.year))
-            
+
     nflcountdown = wrap(nflcountdown)
 
     def nfldraft(self, irc, msg, args, optyear, optround):
@@ -3145,7 +3148,7 @@ class NFL(callbacks.Plugin):
         daysSince = abs(delta.days)
         # finally, output.
         irc.reply("{0} days since last arrest :: {1}".format(self._red(daysSince), " | ".join([i['a'] + " " + i['d'] for i in az])))
-        
+
     nflarrests = wrap(nflarrests)
 
     def nfltotalqbr(self, irc, msg, args, optlist):
@@ -3346,5 +3349,3 @@ class NFL(callbacks.Plugin):
     nflgamestats = wrap(nflgamestats, [('text')])
 
 Class = NFL
-
-# vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=250:
