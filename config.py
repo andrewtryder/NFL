@@ -1,8 +1,5 @@
 ###
-# Copyright (c) 2012-2013, spline
-# All rights reserved.
-#
-#
+# see LICENSE.txt for information.
 ###
 
 import supybot.conf as conf

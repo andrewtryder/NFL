@@ -383,7 +383,7 @@ class NFL(callbacks.Plugin):
             rjson = rjson['d']['results'][0]['Url']
             return rjson
         except Exception as e:
-            print "{0}".format(e)
+            print "ERROR:: _pf :: {0}".format(e)
             return None
 
 
