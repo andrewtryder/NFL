@@ -533,12 +533,12 @@ class NFL(callbacks.Plugin):
             self.log.error("ERROR opening {0}".format(url))
             return
         # sanity check.
-        if "Current Salary Information " not in html:
+        if "Current Contract" not in html:
             irc.reply("ERROR: I could not find current salary information for '{0}'. Player retired or no active contract?".format(optplayer))
             return
         # parse html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        pname = soup.find('div', attrs={'class':'playerHeaderInfo'}).find('h2').getText().encode('utf-8')  # playername.
+        pname = soup.find('h1', attrs={'class':'player-name'}).getText().encode('utf-8')  # playername.
         table = soup.find('table', attrs={'class':'playerTable'})
         # overview salary info.
         salinfo = table.find('table', attrs={'class':'salaryTable salaryInfo'})
@@ -564,26 +564,33 @@ class NFL(callbacks.Plugin):
             irc.reply("{0} :: {1} :: {2}".format(self._bu(pname.encode('utf-8')), " | ".join(si), condetails.encode('utf-8')))
         else:  # just the basics on the contract details from above. something went wrong with condetails.
             irc.reply("{0} :: {1}".format(self._bu(pname.encode('utf-8')), " | ".join(si)))
-        # last entry now.
-        # now lets find the 'current salary' years
-        cursal = table.find('table', attrs={'class':'salaryTable current'})
-        cursalhead = cursal.find('thead').findAll('th')  # list of th names.
-        cursalrows = cursal.find('tbody').findAll('tr', attrs={'class':'salaryRow'})
-        cursalout = []  # list for output.
-        # now iterate over these rows.
-        for cursalrow in cursalrows:
-            tds = cursalrow.findAll('td')
-            for (i, td) in enumerate(tds):
-                if i == 0:  # this is ONLY the year.
-                    cursalout.append("{0}".format(self._bold(td.getText())))
-                else:
-                    # now add it in with mated colheader. td needs to get formatted.
-                    tdtxt = td.getText()  #  grab td text.
-                    if tdtxt != "-":
-                        tdtxt = self._hs(tdtxt)  # try and format..
-                        cursalout.append("{0}: {1}".format(cursalhead[i].getText(), tdtxt))
-        # lets output what we have so far.
-        irc.reply("{0} :: {1}".format(self._bu(pname.encode('utf-8')), " | ".join(cursalout)))
+        # new fix on 1/4/2015
+        # now lets try to find the rest in the table.
+        saldetailtable = soup.find('table', attrs={'class':'salaryTable current'})
+        salhead = saldetailtable.find('thead').findAll('th')
+        salbody = saldetailtable.find('tbody').findAll('tr')
+        # list for output.
+        cout = []
+        # lets do our big loop.
+        for i in salbody:
+            # iterate over each td.
+            for (z, f) in enumerate(i.findAll('td')):
+                h = salhead[z].getText().encode('utf-8')
+                ftd = f.getText().encode('utf-8')
+                # skip conditions.
+                if z == 1:  # skip the 2nd
+                    continue
+                elif ftd == "-":  # skip blanks.
+                    continue
+                else:  # do some formatting.
+                    if h == "Year":  # bold year.
+                        h = self._bold(h)
+                    else:# format money properly.
+                        ftd = self._hs(ftd)
+                    # finally, append. 
+                    cout.append("{0}: {1}".format(h, ftd))
+        # output.
+        irc.reply("{0}".format(" | ".join([i for i in cout])))
 
     nflspotcontract = wrap(nflspotcontract, [('text')])
 
