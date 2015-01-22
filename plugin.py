@@ -397,18 +397,18 @@ class NFL(callbacks.Plugin):
         Parse BING API search results and try to figure out what the best url to return is.
         """
 
-        damerau = []
+        db = []
         # input will be a list of dicts.
         # Url is the only thing we care about.
         try:
             for i in tmp:
                 url = i['Url']
-                damerauscore = jellyfish.damerau_levenshtein_distance(pname, url) #dld
-                damerau.append({'damerau':damerauscore, 'url': url})
+                score = jellyfish.jaro_distance(pname, url) #dld
+                db.append({'score':score, 'url': url})
             # now we have a list, lets sort.
-            dameraulist = sorted(damerau, key=itemgetter('damerau'), reverse=False)[0]
-            # give me the first one, only, and its url.
-            return dameraulist['url']
+            db = sorted(db, key=itemgetter('score'), reverse=True) #, reverse=False)
+            # give me the first one's url.
+            return db[0]['url']
         except Exception as e:
             self.log.info("_bestresult :: ERROR :: {0}".format(e))
             return None
