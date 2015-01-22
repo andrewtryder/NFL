@@ -380,12 +380,38 @@ class NFL(callbacks.Plugin):
         try:
             r = requests.get(url, auth=(bingapikey, bingapikey))
             rjson = r.json()
-            rjson = rjson['d']['results'][0]['Url']
-            return rjson
+            tmp = rjson['d']['results']
+            # little fix because bing's results suck.
+            best = self._bestresult(pname, tmp)  # send it the name and list of dicts.
+            if best:  # if we get something back, return it.
+                return best
+            else:  # try to return the first one.
+                rjson = rjson['d']['results'][0]['Url']
+                return rjson
         except Exception as e:
             print "ERROR:: _pf :: {0}".format(e)
             return None
 
+    def _bestresult(self, pname, tmp):
+        """
+        Parse BING API search results and try to figure out what the best url to return is.
+        """
+
+        damerau = []
+        # input will be a list of dicts.
+        # Url is the only thing we care about.
+        try:
+            for i in tmp:
+                url = i['Url']
+                damerauscore = jellyfish.damerau_levenshtein_distance(pname, url) #dld
+                damerau.append({'damerau':damerauscore, 'url': url})
+            # now we have a list, lets sort.
+            dameraulist = sorted(damerau, key=itemgetter('damerau'), reverse=False)[0]
+            # give me the first one, only, and its url.
+            return dameraulist['url']
+        except Exception as e:
+            self.log.info("_bestresult :: ERROR :: {0}".format(e))
+            return None
 
     ################################################
     # NEW PLAYER DB FUNCTIONS WITH INTERNET SEARCH #
