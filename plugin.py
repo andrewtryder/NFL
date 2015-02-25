@@ -556,32 +556,19 @@ class NFL(callbacks.Plugin):
         pname = soup.find('h1', attrs={'class':'player-name'}).getText().encode('utf-8')  # playername.
         table = soup.find('table', attrs={'class':'playerTable'})
         # overview salary info.
-        salinfo = table.find('table', attrs={'class':'salaryTable salaryInfo'})
-        if not salinfo:
-            irc.reply("ERROR: I could not find a salary table at: {0}".format(pf))
+        cursal = soup.find('p', attrs={'class':'currentinfo'})
+        if not cursal:
+            irc.reply("{0} :: No current contract details.".format(self._bu(pname.encode('utf-8'))))
             return
-        si = []
-        salinfotds = salinfo.findAll('td', attrs={'class':'contract-item'})
-        for (i, salinfotd) in enumerate(salinfotds):  # enum so we skip header row.
-            # two tds in each thing here.
-            l = salinfotd.find('span', attrs={'class':'playerLabel'})
-            e = salinfotd.find('span', attrs={'class':'playerValue'})
-            if i == 0:  # first one only.
-                si.append("{0}".format(e.getText()))
-            else:  # rest of them.
-                saltit = self._bold(l.getText().replace(':', ''))
-                salfig = self._hs(e.getText())
-                si.append("{0}: {1}".format(saltit.encode('utf-8'), salfig.encode('utf-8')))
-        # next, the details on contracts, if present.
-        condetails = table.find('div', attrs={'class':'player-details'})
-        if condetails:  # clean this up a bit because there are too many spaces.
-            condetails = utils.str.normalizeWhitespace(condetails.getText(separator=' ').strip())
-            irc.reply("{0} :: {1} :: {2}".format(self._bu(pname.encode('utf-8')), " | ".join(si), condetails.encode('utf-8')))
-        else:  # just the basics on the contract details from above. something went wrong with condetails.
-            irc.reply("{0} :: {1}".format(self._bu(pname.encode('utf-8')), " | ".join(si)))
+        else:
+            irc.reply("{0} :: {1}".format(self._bu(pname.encode('utf-8')), cursal.getText().encode('utf-8')))
         # new fix on 1/4/2015
         # now lets try to find the rest in the table.
         saldetailtable = soup.find('table', attrs={'class':'salaryTable current'})
+        # break if we don't find it.
+        if not saldetailtable:
+            return
+        # we did find. lets go.
         salhead = saldetailtable.find('thead').findAll('th')
         salbody = saldetailtable.find('tbody').findAll('tr')
         # list for output.
