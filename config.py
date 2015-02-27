@@ -17,7 +17,5 @@ def configure(advanced):
 NFL = conf.registerPlugin('NFL')
 conf.registerGlobalValue(NFL, 'logURLs', registry.Boolean(True, """Should we log all URL calls?"""))
 conf.registerChannelValue(NFL, 'requireVoiceForCalls', registry.Boolean(False, """Require voice for commands?"""))
-conf.registerGlobalValue(NFL, 'bingAPIkey', registry.String('', """Bing API key.""", private=True))
-
 
 # vim:set shiftwidth=4 tabstop=4 expandtab textwidth=250:
