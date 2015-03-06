@@ -5,7 +5,7 @@
 
 # my libs.
 import requests
-import urllib
+from urllib import quote_plus
 from BeautifulSoup import BeautifulSoup
 from base64 import b64decode
 import re
@@ -368,7 +368,7 @@ class NFL(callbacks.Plugin):
 
         # urlencode.
         try:
-            burl = urllib.quote_plus("'" + burl + "'")
+            burl = quote_plus("'" + burl + "'")
             url = self._b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8=") + "search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:en-US:official&client=firefox-a&channel=sb" % (burl)
             headers = {'User-agent':'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:33.0) Gecko/20100101 Firefox/33.0'}
             r = requests.get(url, headers=headers)
