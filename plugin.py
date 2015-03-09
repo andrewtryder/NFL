@@ -119,7 +119,7 @@ class NFL(callbacks.Plugin):
         except ValueError:
             return False
 
-    def _httpget(self, url, h=None, d=None, l=True):
+    def _httpget(self, url, h=None, d=None, l=False):
         """General HTTP resource fetcher. Pass headers via h, data via d, and to log via l."""
 
         if self.registryValue('logURLs') and l:
