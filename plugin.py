@@ -122,7 +122,7 @@ class NFL(callbacks.Plugin):
     def _httpget(self, url, h=None, d=None, l=False):
         """General HTTP resource fetcher. Pass headers via h, data via d, and to log via l."""
 
-        if self.registryValue('logURLs') and l:
+        if self.registryValue('logURLs') or l:
             self.log.info(url)
 
         try:
@@ -2380,29 +2380,22 @@ class NFL(callbacks.Plugin):
             return
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        teamtitle = soup.find('title')
+        teamtitle = soup.find('title').getText().split('|')[0].strip()
         # blank list for container
         capfigs = []
-        # ugh, this keeps changing. find the two bottom tds that matter.
-        headerrow = soup.find('th', text=re.compile('Totals')).findParent('tr')
-        firsttd = soup.find('td', attrs={'class':'total bottom figure'}).findParent('tr')
-        secondtd = soup.find('td', text={'Cap Space'}).findParent('tr')
-        #self.log.info("{0}".format(secondtd))
-        # grab our cells from each tr.
-        headerths = headerrow.findAll('th')
-        firsttds = firsttd.findAll('td')[1:]  # grab all the tds. skip the first.
-        # use firsttd + headerrow.
-        for (i, f) in enumerate(firsttds):
-            h = headerths[i+1].getText().encode('utf-8')  # +1 to mate the skip properly.
-            z = f.getText().encode('utf-8')
-            if z != "" and z != "-":  # don't add blanks. format cap sizes.
-                z = self._hs(z)
-                capfigs.append("{0}: {1}".format(h, z))
-        # last. grab capspace.
-        cs = secondtd.findAll('td')[-1].getText().encode('utf-8')  # tr, findAll td, last td. format it.
-        capfigs.append("{0}: {1}".format(self._bu("CAP SPACE:"), self._hs(cs)))
+        # now find the table
+        table = soup.find('table', attrs={'class':re.compile('.*?captotal.*?')})
+        tbody = table.find('tbody') 
+        rows = tbody.findAll('tr')
+        for row in rows:
+            tds = row.findAll('td')
+            firsttd = tds[0].getText().encode('utf-8')
+            lasttd = tds[-1].getText().encode('utf-8')
+            # format cap #
+            lasttd = self._hs(lasttd)
+            capfigs.append("{0}: {1}".format(firsttd, lasttd))
         # output.
-        output = "{0} :: {1}".format(self._bold(teamtitle.getText()), " | ".join([i for i in capfigs]))
+        output = "{0} :: {1}".format(self._bold(teamtitle), " | ".join([i for i in capfigs]))
         irc.reply(output)
 
     nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
