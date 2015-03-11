@@ -2274,52 +2274,6 @@ class NFL(callbacks.Plugin):
 
     nflcap = wrap(nflcap, [('somethingWithoutSpaces')])
 
-    def nflcoachingstaff(self, irc, msg, args, optteam):
-        """<team>
-        Display a NFL team's coaching staff.
-        Ex: NE
-        """
-
-        # enforce +voice or above to use command?
-        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
-            if ircutils.isChannel(msg.args[0]): # are we in a channel?
-                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
-                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
-                    return
-
-        # test for valid teams.
-        optteam = self._validteams(optteam)
-        if not optteam: # team is not found in aliases or validteams.
-            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
-            return
-        # build and fetch url.
-        url = self._b64decode('aHR0cDovL2VuLndpa2lwZWRpYS5vcmcvd2lraS9MaXN0X29mX2N1cnJlbnRfTmF0aW9uYWxfRm9vdGJhbGxfTGVhZ3VlX3N0YWZmcw==')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # process html from wiki.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        tables = soup.findAll('table', attrs={'style':'text-align: left;'})
-        # container for output.
-        coachingstaff = collections.defaultdict(list)
-        # now process through each table and populate.
-        for table in tables:
-            listitems = table.findAll('li')[3:]
-            for li in listitems:
-                team = li.findPrevious('h3')
-                team = self._translateTeam('team', 'full', team.getText())
-                coachingstaff[team].append(li.getText().replace(u' –',': '))
-        # output time.
-        output = coachingstaff.get(str(optteam), None)
-        if not output:
-            irc.reply("ERROR: Failed to find coaching staff for: {0}. Maybe something broke?".format(optteam))
-        else:
-            irc.reply("{0} :: {1}".format(self._red(optteam), " | ".join([item.encode('utf-8') for item in output])))
-
-    nflcoachingstaff = wrap(nflcoachingstaff, [('somethingWithoutSpaces')])
-
     def nflroster(self, irc, msg, args, optteam, optposition):
         """<team> <position/#>
 

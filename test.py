@@ -22,9 +22,6 @@ class NFLTestCase(PluginTestCase):
     def testnflcoach(self):
         self.assertNotError('nflcoach NE')
 
-    def testnflcoachingstaff(self):
-        self.assertNotError('nflcoachingstaff NE')
-
     def testnflcountdown(self):
         self.assertNotError('nflcountdown')
 
