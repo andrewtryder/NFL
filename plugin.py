@@ -2628,25 +2628,17 @@ class NFL(callbacks.Plugin):
 
     nflinjury = wrap(nflinjury, [getopts({'details':''}), ('somethingWithoutSpaces')])
 
-    def nflpowerrankings(self, irc, msg, args, optteam):
-        """[team]
+    def nflpowerrankings(self, irc, msg, args):
+        """
         Display this week's NFL Power Rankings.
-        Optional: use [team] to display specific commentary. Ex: ATL
         """
 
         # enforce +voice or above to use command?
-        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
-            if ircutils.isChannel(msg.args[0]): # are we in a channel?
-                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
+        if self.registryValue('requireVoiceForCalls', msg.args[0]):  # should we check?
+            if ircutils.isChannel(msg.args[0]):  # are we in a channel?
+                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick):  # are they + or @?
                     irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
                     return
-
-        if optteam:  # if we have a team, check if its valid.
-            # test for valid teams.
-            optteam = self._validteams(optteam)
-            if not optteam: # team is not found in aliases or validteams.
-                irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
-                return
 
         url = self._b64decode('aHR0cDovL2VzcG4uZ28uY29tL25mbC9wb3dlcnJhbmtpbmdz')
         html = self._httpget(url)
@@ -2656,50 +2648,22 @@ class NFL(callbacks.Plugin):
             return
         # process HTML
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        datehead = soup.find('div', attrs={'class':'date floatleft'})
-        table = soup.find('table', attrs={'class':'tablehead'})
-        headline = table.find('tr', attrs={'class':'stathead'})
-        rows = table.findAll('tr', attrs={'class':re.compile('^oddrow|^evenrow')})
+        headline = soup.find('div', attrs={'class': 'headline'}).find('h2').getText()
+        table = soup.find('table', attrs={'class': 'tablehead'})
+        rows = table.findAll('tr', attrs={'class': re.compile('^oddrow|^evenrow')})
 
         powerrankings = []  # list to hold each one.
-        prtable = {}
 
         for row in rows:  # one row per team.
-            teamdict = {}  # teamdict to put into powerrankings list.
             tds = row.findAll('td')  # findall tds.
             rank = tds[0].getText()  # rank number.
-            team = tds[1].find('div', attrs={'style':'padding:10px 0;'}).find('a').getText()  # finds short.
-            shortteam = self._translateTeam('team', 'short', str(team))  # small abbreviation via the db.
-            lastweek = tds[2].find('span', attrs={'class':'pr-last'}).getText().replace('Last Week:','').strip()  # rank #
-            comment = tds[3].getText()  # comment.
-            # check if we're up or down and insert a symbol.
-            if int(rank) < int(lastweek):
-                symbol = self._green('▲')
-            elif int(rank) > int(lastweek):
-                symbol = self._red('▼')
-            else:  # - if the same.
-                symbol = "-"
-
+            team = tds[1].findAll('a')[1].getText()  # team.
             # now add the rows to our data structures.
-            powerrankings.append("{0}. {1} (prev: {2} {3})".format(rank,shortteam,symbol,lastweek))
-            prtable[str(shortteam)] = "{0}. {1} (prev: {2} {3}) {4}".format(rank,team,symbol,lastweek,comment)
+            powerrankings.append("{0}. {1}".format(rank, team))
+        # output
+        irc.reply("{0} :: {1}".format(headline, " | ".join([i for i in powerrankings])))
 
-        # now output. conditional if we have the team or not.
-        if not optteam:  # no team so output the list.
-            irc.reply("{0} :: {1}".format(self._blue(headline.getText()), datehead.getText()))
-            for N in self._batch(powerrankings, 12):  # iterate through each team. 12 per line
-                #
-                irc.reply("{0}".format(" | ".join([item for item in N])))
-        else:  # find the team and only output that team.
-            output = prtable.get(str(optteam), None)
-            if not output:
-                irc.reply("I could not find: %s - Something must have gone wrong." % optteam)
-                return
-            else:
-                irc.reply("{0} :: {1}".format(self._blue(headline.getText()), datehead.getText()))
-                irc.reply("{0}".format(output))
-
-    nflpowerrankings = wrap(nflpowerrankings, [optional('somethingWithoutSpaces')])
+    nflpowerrankings = wrap(nflpowerrankings)
 
     def nflschedule(self, irc, msg, args, optlist, optteam):
         """[--pre] <team>
