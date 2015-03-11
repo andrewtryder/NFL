@@ -1585,8 +1585,8 @@ class NFL(callbacks.Plugin):
             return
         # process html.
         soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        table = soup.find('table', attrs={'id':'superbowls'})
-        rows = table.findAll('tr')[1:]  # first row is the header.
+        table = soup.find('table', attrs={'id': 'superbowls'})
+        rows = table.findAll('tr', attrs={'valign': 'top'})[1:]  # first row is the header.
         # key/value dict we use for output.
         sb_data = collections.defaultdict(list)
         # one row per superbowl.
