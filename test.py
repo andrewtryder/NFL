@@ -7,5 +7,6 @@ from supybot.test import *
 class NFLTestCase(PluginTestCase):
     plugins = ('NFL',)
 
+    def testNFL(self):
+        self.assertNotError('nflcap NE')
 
-# vim:set shiftwidth=4 tabstop=4 expandtab textwidth=79:
