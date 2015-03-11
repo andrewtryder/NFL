@@ -1790,57 +1790,6 @@ class NFL(callbacks.Plugin):
 
     nflteamdraft = wrap(nflteamdraft, [('somethingWithoutSpaces'), ('int')])
 
-    def nflweather(self, irc, msg, args, optteam):
-        """<team>
-        Display weather for the next game.
-        Ex: NE
-        """
-
-        # enforce +voice or above to use command?
-        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
-            if ircutils.isChannel(msg.args[0]): # are we in a channel?
-                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
-                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
-                    return
-
-        # test for valid teams.
-        optteam = self._validteams(optteam)
-        if not optteam: # team is not found in aliases or validteams.
-            irc.reply("ERROR: Team not found. Valid teams are: {0}".format(self._allteams()))
-            return
-        # fetch url.
-        url = self._b64decode('aHR0cDovL3d3dy5uZmx3ZWF0aGVyLmNvbS8=')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # process html.
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        table = soup.find('table', attrs={'class':'main'})
-        tbody = table.find('tbody')
-        rows = tbody.findAll('tr')
-        # container for output.
-        weatherList = collections.defaultdict(list)
-        # each row is a game.
-        for row in rows:
-            tds = [item.getText() for item in row.findAll('td')]
-            awayTeam = self._translateTeam('team', 'short', tds[0])  # translate into the team for each.
-            homeTeam = self._translateTeam('team', 'short', tds[4])
-            timeOrScore = tds[5]
-            gameTemp = tds[8]
-            appendString = "{0}@{1} - {2} - {3}".format(awayTeam, self._bold(homeTeam), timeOrScore, gameTemp)
-            weatherList[awayTeam].append(appendString)
-            weatherList[homeTeam].append(appendString)
-        # output time.
-        output = weatherList.get(optteam, None)
-        if not output:
-            irc.reply("ERROR: No weather found for: {0}. Team on bye?".format(optteam))
-        else:
-            irc.reply(" ".join(output))
-
-    nflweather = wrap(nflweather, [('somethingWithoutSpaces')])
-
     def nfltrans(self, irc, msg, args):
         """
         Display latest NFL transactions.
@@ -2967,53 +2916,6 @@ class NFL(callbacks.Plugin):
         irc.reply("{0} :: {1}".format(self._red(h2), " | ".join([i for i in object_list])))
 
     nfldraft = wrap(nfldraft, [optional('int'), optional('int')])
-
-    def nfltrades(self, irc, msg, args):
-        """
-        Display the last NFL 5 trades.
-        """
-
-        # enforce +voice or above to use command?
-        if self.registryValue('requireVoiceForCalls', msg.args[0]): # should we check?
-            if ircutils.isChannel(msg.args[0]): # are we in a channel?
-                if not irc.state.channels[msg.args[0]].isVoicePlus(msg.nick): # are they + or @?
-                    irc.error("ERROR: You have to have voice to use this command in {0}.".format(msg.args[0]))
-                    return
-
-        url = self._b64decode('aHR0cDovL3d3dy5zcG90cmFjLmNvbS9uZmwtdHJhZGUtdHJhY2tlci8=')
-        html = self._httpget(url)
-        if not html:
-            irc.reply("ERROR: Failed to fetch {0}.".format(url))
-            self.log.error("ERROR opening {0}".format(url))
-            return
-        # process html
-        soup = BeautifulSoup(html, convertEntities=BeautifulSoup.HTML_ENTITIES, fromEncoding='utf-8')
-        table = soup.find('table', attrs={'border':'0'})
-        tbodys = table.findAll('tbody')
-        # list for output
-        nfltrade_list = []
-        # each tbody for days. lump it all together.
-        for tbody in tbodys:
-            rows = tbody.findAll('tr')
-            for row in rows:
-                player = row.find('td', attrs={'class':'player'}).find('a').getText()
-                data = row.find('span', attrs={'class':'data'}).getText()
-                date = row.findPrevious('th', attrs={'class':'tracker-date'}).getText()
-                fromteam = row.findAll('td', attrs={'class':'playerend'})[0].find('img')['src'].split('/', 7)
-                toteam = row.findAll('td', attrs={'class':'playerend'})[1].find('img')['src'].split('/', 7)
-                # translate into TEAMS.
-                fromteam = self._translateTeam('team','st', fromteam[6].replace('.png', ''))  # have to use silly
-                toteam = self._translateTeam('team','st', toteam[6].replace('.png', ''))  # .png method with both.
-                # create string. apppend.
-                appendString = "{0} :: {1}{2}{3} :: {4} {5}".format(date, self._bold(fromteam), self._red('->'), self._bold(toteam), player, data)
-                nfltrade_list.append(appendString)
-        # output time.
-        irc.reply("Last 5 NFL Trades")
-        # now output the first 5.
-        for each in nfltrade_list[0:5]:
-            irc.reply(each)
-
-    nfltrades = wrap(nfltrades)
 
     def nflarrests(self, irc, msg, args):
         """
