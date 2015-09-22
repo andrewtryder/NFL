@@ -58,14 +58,12 @@ INSERT INTO nflplayeralias (alias, name) VALUES ('famous jameis', 'jameis winsto
 INSERT INTO nflplayeralias (alias, name) VALUES ('tmobile', 'tyrod taylor');
 INSERT INTO nflplayeralias (alias, name) VALUES ('t-mobile', 'tyrod taylor');
 INSERT INTO nflplayeralias (alias, name) VALUES ('boobie', 'anthony dixon');
-INSERT INTO nflplayeralias (alias, name) VALUES ('black unicorn', 'martellus bennett');
 INSERT INTO nflplayeralias (alias, name) VALUES ('golden graham', 'jimmy graham');
 INSERT INTO nflplayeralias (alias, name) VALUES ('johnny football', 'johnny manziel');
 INSERT INTO nflplayeralias (alias, name) VALUES ('johnny fb', 'johnny manziel');
 INSERT INTO nflplayeralias (alias, name) VALUES ('johnnyfb', 'johnny manziel');
 INSERT INTO nflplayeralias (alias, name) VALUES ('nickfoleon dynamite', 'nick foles');
 INSERT INTO nflplayeralias (alias, name) VALUES ('seabass', 'sebastian janikowski');
-INSERT INTO nflplayeralias (alias, name) VALUES ('tmobile', 'tyrod taylor');
 INSERT INTO nflplayeralias (alias, name) VALUES ('revis island', 'darrelle revis');
 INSERT INTO nflplayeralias (alias, name) VALUES ('shermanator', 'richard sherman');
 INSERT INTO nflplayeralias (alias, name) VALUES ('elite', 'eli manning');
