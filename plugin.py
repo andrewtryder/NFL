@@ -369,14 +369,15 @@ class NFL(callbacks.Plugin):
         # urlencode.
         try:
             burl = quote_plus("'" + burl + "'")
-            url = self._b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8=") + "search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:en-US:official&client=firefox-a&channel=sb" % (burl)
-            headers = {'User-agent':'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:33.0) Gecko/20100101 Firefox/33.0'}
-            r = requests.get(url, headers=headers)
-            html = BeautifulSoup(r.content)
-            div = html.find('div', attrs={'id':'search'})
-            lnks = div.findAll('a')
-            lnkone = lnks[0]
-            return lnkone['href']
+            # The following is deprecated as of Nov, 2010 but still functions, may want to 
+            # implement https://developers.google.com/custom-search/json-api/v1/overview 
+            # instead, but it requires custom search engine and API keys and is limited to 
+            # 100 free requests per day.
+            url = 'http://ajax.googleapis.com/ajax/services/search/web?v=1.0&q=%s' % burl
+            r = requests.get(url)
+            jsond = json.loads(r.content)
+            lnkone = jsond['responseData']['results'][0]['unescapedUrl']
+            return lnkone
         except Exception as e:
             self.log.info("ERROR :: _pf :: {0}".format(e))
             return None
